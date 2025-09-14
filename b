@@ -4,18 +4,15 @@ local v0=game:GetService("Players");local v1=game:GetService("RunService");local
             local loaded = false
             local connection
 
-            -- Wait for the game to fully load
             connection = RunService.Heartbeat:Connect(function()
                 if game:IsLoaded() then
                     loaded = true
-                    connection:Disconnect() -- stop checking
+                    connection:Disconnect() 
                 end
             end)
 
-            -- Fallback: wait up to 5 seconds
             repeat wait(1) until loaded or time() > 5
 
-            -- Wait until Workspace.Filter exists
             local function waitForFilter()
                 while not game:GetService("Workspace"):FindFirstChild("Filter") do
                     RunService.Heartbeat:Wait()
@@ -23,6 +20,5 @@ local v0=game:GetService("Players");local v1=game:GetService("RunService");local
             end
             waitForFilter()
 
-            -- Load the framework script after teleport
             loadstring(game:HttpGet('https://raw.githubusercontent.com/Jonmaster2007/a/refs/heads/main/b'))()
         ]]);end end);
