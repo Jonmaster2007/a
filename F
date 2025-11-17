@@ -1,0 +1,237 @@
+-- NameTag Module (1-second cleanup version)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local camera = workspace.CurrentCamera
+local localPlayer = Players.LocalPlayer
+
+-- SETTINGS
+local nameTagsEnabled = false
+local healthTagsEnabled = true
+local distanceTagsEnabled = true
+local useTeamColoring = true
+
+local defaultTeamColor = Color3.fromRGB(0,140,250)
+local neutralColor = Color3.fromRGB(255,255,255)
+
+-- STATE
+local drawings = {}     -- drawings[player] = { name, health, distance }
+local allDrawings = {}  -- set of all drawings created
+
+---------------------------------------------------------------------
+-- SAFE REMOVE
+---------------------------------------------------------------------
+local function safeRemove(obj)
+	if obj and obj.Remove then
+		pcall(function()
+			obj:Remove()
+		end)
+	end
+	allDrawings[obj] = nil
+end
+
+local function removePlayerDrawings(p)
+	if drawings[p] then
+		for _, d in pairs(drawings[p]) do
+			safeRemove(d)
+		end
+		drawings[p] = nil
+	end
+end
+
+local function safeCreateText(text, color, size, font)
+	local ok, t = pcall(function()
+		local dt = Drawing.new("Text")
+		dt.Text = text
+		dt.Size = size or 20
+		dt.Center = true
+		dt.Outline = true
+		dt.OutlineColor = Color3.new(0,0,0)
+		dt.Color = color
+		dt.Font = font or 1
+		dt.Visible = false
+		return dt
+	end)
+
+	if ok and t then
+		allDrawings[t] = true
+		return t
+	end
+
+	return nil
+end
+
+---------------------------------------------------------------------
+-- TEAM COLOR LOGIC
+---------------------------------------------------------------------
+local function getTeamColor(player)
+	if not useTeamColoring then return neutralColor end
+
+	local localTeam = localPlayer.Team
+	local allSame = true
+
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= localPlayer and plr.Team ~= localTeam then
+			allSame = false
+			break
+		end
+	end
+
+	if allSame then
+		return defaultTeamColor
+	elseif player and player.TeamColor then
+		return player.TeamColor.Color
+	else
+		return defaultTeamColor
+	end
+end
+
+---------------------------------------------------------------------
+-- EXPORTED MODULE
+---------------------------------------------------------------------
+local module = {}
+
+function module.toggleNameTags(v)
+	nameTagsEnabled = v
+end
+
+function module.toggleHealthTags(v)
+	healthTagsEnabled = v
+end
+
+function module.toggleDistance(v)
+	distanceTagsEnabled = v
+end
+
+function module.toggleTeamColoring(v)
+	useTeamColoring = v
+end
+
+---------------------------------------------------------------------
+-- CLEANUP WHEN PLAYER LEAVES
+---------------------------------------------------------------------
+local function hookCleanup(plr)
+	plr.CharacterRemoving:Connect(function()
+		removePlayerDrawings(plr)
+	end)
+
+	Players.PlayerRemoving:Connect(function(rem)
+		if rem == plr then
+			removePlayerDrawings(plr)
+		end
+	end)
+end
+
+for _, plr in ipairs(Players:GetPlayers()) do
+	hookCleanup(plr)
+end
+
+Players.PlayerAdded:Connect(hookCleanup)
+
+---------------------------------------------------------------------
+-- RENDER UPDATE (ONLY 1 PER FRAME, NO CLEANUP HERE)
+---------------------------------------------------------------------
+local aliveMap = {}  -- reused every frame (performance)
+
+RunService.RenderStepped:Connect(function()
+	if not camera then return end
+
+	-- clear alive map very cheaply
+	table.clear(aliveMap)
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player == localPlayer then
+			removePlayerDrawings(player)
+		else
+			local char = player.Character
+			local head = char and char:FindFirstChild("Head")
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+			if not head then
+				removePlayerDrawings(player)
+			else
+				drawings[player] = drawings[player] or {}
+
+				local pos, onScreen = camera:WorldToViewportPoint(head.Position)
+				local dist = (camera.CFrame.Position - head.Position).Magnitude
+				local tagColor = getTeamColor(player)
+
+				local nameY = -18
+				local healthY = 18
+
+				-- NAME TAG
+				if nameTagsEnabled then
+					if not drawings[player].name then
+						drawings[player].name = safeCreateText(player.Name, tagColor, 24, 4)
+					end
+
+					local tag = drawings[player].name
+					if tag then
+						tag.Color = tagColor
+						tag.Visible = onScreen
+						tag.Position = Vector2.new(pos.X, pos.Y + nameY)
+						aliveMap[tag] = true
+					end
+				end
+
+				-- HEALTH TAG
+				if healthTagsEnabled and hum then
+					if not drawings[player].health then
+						drawings[player].health = safeCreateText("0", Color3.fromRGB(0,200,0), 28, 4)
+					end
+
+					local tag = drawings[player].health
+					if tag then
+						tag.Visible = onScreen
+						tag.Text = tostring(math.floor(hum.Health))
+						tag.Position = Vector2.new(pos.X, pos.Y + healthY)
+						aliveMap[tag] = true
+					end
+				end
+
+				-- DISTANCE TAG
+				if distanceTagsEnabled then
+					if not drawings[player].distance then
+						drawings[player].distance = safeCreateText("0", Color3.fromRGB(200,200,200), 22, 4)
+					end
+
+					local tag = drawings[player].distance
+					local hrp1 = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+					local hrp2 = char and char:FindFirstChild("HumanoidRootPart")
+					local meters = 0
+					if hrp1 and hrp2 then
+						meters = math.floor((hrp1.Position - hrp2.Position).Magnitude / 3.571)
+					end
+
+					if tag then
+						tag.Visible = onScreen
+						tag.Text = tostring(meters)
+						tag.Position = Vector2.new(pos.X, pos.Y + healthY + 18)
+						aliveMap[tag] = true
+					end
+				end
+			end
+		end
+	end
+end)
+
+---------------------------------------------------------------------
+-- CLEANUP LOOP (RUNS **1 TIME PER SECOND**)
+---------------------------------------------------------------------
+task.spawn(function()
+	while true do
+		task.wait(1)
+
+		for obj in pairs(allDrawings) do
+			if not aliveMap[obj] then
+				safeRemove(obj)
+			end
+		end
+	end
+end)
+
+---------------------------------------------------------------------
+-- EXPORT
+---------------------------------------------------------------------
+_G.NameTagModule = module
+return module
