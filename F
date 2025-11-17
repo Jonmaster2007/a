@@ -19,7 +19,7 @@ local drawings = {}     -- drawings[player] = { name, health, distance }
 local allDrawings = {}  -- set of all drawings created
 
 ---------------------------------------------------------------------
--- SAFE REMOVE
+-- SAFE REMOVE (UPDATED FOR TOGGLES)
 ---------------------------------------------------------------------
 local function safeRemove(obj)
 	if obj and obj.Remove then
@@ -27,8 +27,20 @@ local function safeRemove(obj)
 			obj:Remove()
 		end)
 	end
+
+	-- Remove from global drawings set
 	allDrawings[obj] = nil
+
+	-- Remove references in per-player drawings table
+	for player, drawTbl in pairs(drawings) do
+		for key, d in pairs(drawTbl) do
+			if d == obj then
+				drawTbl[key] = nil
+			end
+		end
+	end
 end
+
 
 local function removePlayerDrawings(p)
 	if drawings[p] then
