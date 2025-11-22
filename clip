@@ -1,66 +1,50 @@
-_G.NoclipModule = _G.NoclipModule or loadstring([[
-    local Players = game:GetService("Players")
-    local RunService = game:GetService("RunService")
-    local LocalPlayer = Players.LocalPlayer
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
-    local floatName = "HumanoidRootPart"
-    local Clip = true
-    local NoclipConnection = nil
+local LocalPlayer = Players.LocalPlayer
+local NoclipConnection = nil
+local Clip = true
+local floatName = "HumanoidRootPart"
 
-    local updateInterval = 0.3
-    local lastUpdate = 0
+local updateInterval = 0.3
+local lastUpdate = 0
 
-    local function ApplyNoclip(dt)
-        lastUpdate += dt
-        if lastUpdate < updateInterval then return end
-        lastUpdate = 0
+_G.NoclipModule = _G.NoclipModule or {}
 
-        if not Clip and LocalPlayer.Character then
-            for _, v in ipairs(LocalPlayer.Character:GetDescendants()) do
-                if v:IsA("BasePart") and v.CanCollide and v.Name ~= floatName then
-                    v.CanCollide = false
-                end
+local function ApplyNoclip(dt)
+    lastUpdate += dt
+    if lastUpdate < updateInterval then return end
+    lastUpdate = 0
+
+    if not Clip and LocalPlayer.Character then
+        for _, v in ipairs(LocalPlayer.Character:GetDescendants()) do
+            if v:IsA("BasePart") and v.CanCollide and v.Name ~= floatName then
+                v.CanCollide = false
             end
         end
     end
+end
 
-    local function noclip()
-        if NoclipConnection then return end
-        Clip = false
-        lastUpdate = 0
-        NoclipConnection = RunService.Heartbeat:Connect(ApplyNoclip)
+function _G.NoclipModule.noclip()
+    if NoclipConnection then return end
+    Clip = false
+    lastUpdate = 0
+    NoclipConnection = RunService.Heartbeat:Connect(ApplyNoclip)
+end
+
+function _G.NoclipModule.clip()
+    if NoclipConnection then
+        NoclipConnection:Disconnect()
+        NoclipConnection = nil
     end
+    Clip = true
 
-    local function clip()
-        if NoclipConnection then
-            NoclipConnection:Disconnect()
-            NoclipConnection = nil
-        end
-
-        Clip = true
-
-        local char = LocalPlayer.Character
-        if char then
-            for _, v in ipairs(char:GetDescendants()) do
-                if v:IsA("BasePart") and v.Name ~= floatName then
-                    v.CanCollide = true
-                end
+    local character = LocalPlayer.Character
+    if character then
+        for _, v in ipairs(character:GetDescendants()) do
+            if v:IsA("BasePart") and v.Name ~= floatName then
+                v.CanCollide = true
             end
         end
     end
-
-    local function toggle()
-        if Clip then
-            noclip()
-        else
-            clip()
-        end
-    end
-
-    return {
-        noclip = noclip,
-        clip = clip,
-        toggle = toggle,
-        getState = function() return not Clip end,
-    }
-]])()
+end
