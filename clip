@@ -1,83 +1,70 @@
--- Noclip Module (Safe Version - FULL collision restore)
+-- Fully Safe Noclip Module (converted to use your command-style logic)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+
 local LocalPlayer = Players.LocalPlayer
+local floatName = "HumanoidRootPart"
 
 local Clip = true
-local floatName = "HumanoidRootPart"
 local Noclipping = nil
 
-_G.NoclipModule = _G.NoclipModule or {}
+_G.NoclipModule = {}
 
----------------------------------------------------------------------
--- Turn OFF collisions safely
----------------------------------------------------------------------
-local function applyNoclip()
-	if not LocalPlayer.Character then return end
+-------------------------------------------------------------
+-- INTERNAL: The working noclip loop you prefer
+-------------------------------------------------------------
+local function NoclipLoop()
+    local char = LocalPlayer.Character
+    if Clip or not char then return end
 
-	for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
-		if part:IsA("BasePart") and part.Name ~= floatName then
-			part.CanCollide = false
-		end
-	end
+    for _, child in ipairs(char:GetDescendants()) do
+        if child:IsA("BasePart") 
+            and child.CanCollide == true 
+            and child.Name ~= floatName then
+
+            child.CanCollide = false
+        end
+    end
 end
 
----------------------------------------------------------------------
--- Turn ON collisions safely (FIXES prompts + movement)
----------------------------------------------------------------------
-local function restoreCollision()
-	local char = LocalPlayer.Character
-	if not char then return end
-
-	for _, part in ipairs(char:GetDescendants()) do
-		if part:IsA("BasePart") then
-			part.CanCollide = true
-		end
-	end
-
-	-- Force physics refresh (fixes proximity prompts)
-	task.delay(0.05, function()
-		for _, part in ipairs(char:GetDescendants()) do
-			if part:IsA("BasePart") then
-				part.CanCollide = true
-			end
-		end
-	end)
-end
-
----------------------------------------------------------------------
--- Public API
----------------------------------------------------------------------
-
+-------------------------------------------------------------
+-- PUBLIC: Enable noclip
+-------------------------------------------------------------
 function _G.NoclipModule.noclip()
-	if Noclipping then return end
-	Clip = false
-	applyNoclip()
+    if not Clip then return end
+    
+    Clip = false
+    task.wait(0.1)
 
-	Noclipping = RunService.Stepped:Connect(function()
-		if not Clip then
-			applyNoclip()
-		end
-	end)
+    -- Ensure fresh connection
+    if Noclipping then
+        Noclipping:Disconnect()
+    end
+
+    Noclipping = RunService.Stepped:Connect(NoclipLoop)
 end
 
+-------------------------------------------------------------
+-- PUBLIC: Disable noclip
+-------------------------------------------------------------
 function _G.NoclipModule.clip()
-	Clip = true
+    Clip = true
 
-	-- stop noclip loop
-	if Noclipping then
-		Noclipping:Disconnect()
-		Noclipping = nil
-	end
-
-	restoreCollision()
+    -- Stop loop
+    if Noclipping then
+        Noclipping:Disconnect()
+        Noclipping = nil
+    end
 end
 
+-------------------------------------------------------------
+-- PUBLIC: Toggle noclip
+-------------------------------------------------------------
 function _G.NoclipModule.toggle()
-	if Clip then
-		_G.NoclipModule.noclip()
-	else
-		_G.NoclipModule.clip()
-	end
+    if Clip then
+        _G.NoclipModule.noclip()
+    else
+        _G.NoclipModule.clip()
+    end
 end
