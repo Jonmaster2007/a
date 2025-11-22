@@ -1,50 +1,52 @@
+-- Noclip Module (Loadstring version - clean, no admin framework)
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
-local NoclipConnection = nil
 local Clip = true
 local floatName = "HumanoidRootPart"
-
-local updateInterval = 0.3
-local lastUpdate = 0
+local Noclipping = nil
 
 _G.NoclipModule = _G.NoclipModule or {}
 
-local function ApplyNoclip(dt)
-    lastUpdate += dt
-    if lastUpdate < updateInterval then return end
-    lastUpdate = 0
-
-    if not Clip and LocalPlayer.Character then
-        for _, v in ipairs(LocalPlayer.Character:GetDescendants()) do
-            if v:IsA("BasePart") and v.CanCollide and v.Name ~= floatName then
-                v.CanCollide = false
-            end
-        end
-    end
+local function NoclipStep()
+	if not Clip and LocalPlayer.Character then
+		for _, child in pairs(LocalPlayer.Character:GetDescendants()) do
+			if child:IsA("BasePart") and child.CanCollide == true and child.Name ~= floatName then
+				child.CanCollide = false
+			end
+		end
+	end
 end
 
 function _G.NoclipModule.noclip()
-    if NoclipConnection then return end
-    Clip = false
-    lastUpdate = 0
-    NoclipConnection = RunService.Heartbeat:Connect(ApplyNoclip)
+	if Noclipping then return end
+	Clip = false
+	Noclipping = RunService.Stepped:Connect(NoclipStep)
 end
 
 function _G.NoclipModule.clip()
-    if NoclipConnection then
-        NoclipConnection:Disconnect()
-        NoclipConnection = nil
-    end
-    Clip = true
+	Clip = true
+	if Noclipping then
+		Noclipping:Disconnect()
+		Noclipping = nil
+	end
 
-    local character = LocalPlayer.Character
-    if character then
-        for _, v in ipairs(character:GetDescendants()) do
-            if v:IsA("BasePart") and v.Name ~= floatName then
-                v.CanCollide = true
-            end
-        end
-    end
+	local char = LocalPlayer.Character
+	if char then
+		for _, child in pairs(char:GetDescendants()) do
+			if child:IsA("BasePart") and child.Name ~= floatName then
+				child.CanCollide = true
+			end
+		end
+	end
+end
+
+function _G.NoclipModule.toggle()
+	if Clip then
+		_G.NoclipModule.noclip()
+	else
+		_G.NoclipModule.clip()
+	end
 end
