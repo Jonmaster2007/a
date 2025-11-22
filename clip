@@ -1,46 +1,77 @@
--- Noclip Module (Loadstring version - clean, no admin framework)
+-- Noclip Module (Safe Version - FULL collision restore)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-
 local LocalPlayer = Players.LocalPlayer
+
 local Clip = true
 local floatName = "HumanoidRootPart"
 local Noclipping = nil
 
 _G.NoclipModule = _G.NoclipModule or {}
 
-local function NoclipStep()
-	if not Clip and LocalPlayer.Character then
-		for _, child in pairs(LocalPlayer.Character:GetDescendants()) do
-			if child:IsA("BasePart") and child.CanCollide == true and child.Name ~= floatName then
-				child.CanCollide = false
-			end
+---------------------------------------------------------------------
+-- Turn OFF collisions safely
+---------------------------------------------------------------------
+local function applyNoclip()
+	if not LocalPlayer.Character then return end
+
+	for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+		if part:IsA("BasePart") and part.Name ~= floatName then
+			part.CanCollide = false
 		end
 	end
 end
 
+---------------------------------------------------------------------
+-- Turn ON collisions safely (FIXES prompts + movement)
+---------------------------------------------------------------------
+local function restoreCollision()
+	local char = LocalPlayer.Character
+	if not char then return end
+
+	for _, part in ipairs(char:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.CanCollide = true
+		end
+	end
+
+	-- Force physics refresh (fixes proximity prompts)
+	task.delay(0.05, function()
+		for _, part in ipairs(char:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.CanCollide = true
+			end
+		end
+	end)
+end
+
+---------------------------------------------------------------------
+-- Public API
+---------------------------------------------------------------------
+
 function _G.NoclipModule.noclip()
 	if Noclipping then return end
 	Clip = false
-	Noclipping = RunService.Stepped:Connect(NoclipStep)
+	applyNoclip()
+
+	Noclipping = RunService.Stepped:Connect(function()
+		if not Clip then
+			applyNoclip()
+		end
+	end)
 end
 
 function _G.NoclipModule.clip()
 	Clip = true
+
+	-- stop noclip loop
 	if Noclipping then
 		Noclipping:Disconnect()
 		Noclipping = nil
 	end
 
-	local char = LocalPlayer.Character
-	if char then
-		for _, child in pairs(char:GetDescendants()) do
-			if child:IsA("BasePart") and child.Name ~= floatName then
-				child.CanCollide = true
-			end
-		end
-	end
+	restoreCollision()
 end
 
 function _G.NoclipModule.toggle()
