@@ -8,15 +8,33 @@ local localPlayer = Players.LocalPlayer
 _G.ExcludedPlayers = _G.ExcludedPlayers or {}
 local excludedPlayers = _G.ExcludedPlayers
 
--- SETTINGS
-
+-- SETTINGS (default states)
 local nameTagsEnabled = false 
 local healthTagsEnabled = true 
 local distanceTagsEnabled = true 
 local useTeamColoring = true
 
+-- CREATE MODULE (this MUST come before any module functions)
 local module = {}
 
+-- GETTERS
+function module.getNameTagsEnabled()
+    return nameTagsEnabled
+end
+
+function module.getHealthTagsEnabled()
+    return healthTagsEnabled
+end
+
+function module.getDistanceEnabled()
+    return distanceTagsEnabled
+end
+
+function module.getTeamColoring()
+    return useTeamColoring
+end
+
+-- TOGGLES
 function module.toggleNameTags(state)
     nameTagsEnabled = state
 end
