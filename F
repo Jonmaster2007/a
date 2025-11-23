@@ -173,27 +173,35 @@ RunService.RenderStepped:Connect(function()
 
 				local pos, onScreen = camera:WorldToViewportPoint(head.Position)
 				local dist = (camera.CFrame.Position - head.Position).Magnitude
+
 				local tagColor = getTeamColor(player)
+
+				local displayName = (player.DisplayName ~= player.Name) and player.DisplayName or player.Name
 
 				local nameY = -18
 				local healthY = 18
 
-				-- NAME TAG
+				---------------------------------------------------------
+				-- NAME TAG  (UPDATED)
+				---------------------------------------------------------
 				if nameTagsEnabled then
 					if not drawings[player].name then
-						drawings[player].name = safeCreateText(player.Name, tagColor, 24, 4)
+						-- create with displayName instead of Name
+						drawings[player].name = safeCreateText(displayName, tagColor, 24, 4)
 					end
 
 					local tag = drawings[player].name
 					if tag then
-						tag.Color = tagColor
+						tag.Text = displayName                         -- update name
+						tag.Color = tagColor                           -- purple if excluded
 						tag.Visible = onScreen
 						tag.Position = Vector2.new(pos.X, pos.Y + nameY)
 						aliveMap[tag] = true
 					end
 				end
+				---------------------------------------------------------
 
-				-- HEALTH TAG
+				-- HEALTH TAG (unchanged)
 				if healthTagsEnabled and hum then
 					if not drawings[player].health then
 						drawings[player].health = safeCreateText("0", Color3.fromRGB(0,200,0), 28, 4)
@@ -208,7 +216,7 @@ RunService.RenderStepped:Connect(function()
 					end
 				end
 
-				-- DISTANCE TAG
+				-- DISTANCE TAG (unchanged)
 				if distanceTagsEnabled then
 					if not drawings[player].distance then
 						drawings[player].distance = safeCreateText("0", Color3.fromRGB(200,200,200), 22, 4)
