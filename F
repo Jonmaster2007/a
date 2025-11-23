@@ -80,19 +80,17 @@ end
 -- TEAM COLOR LOGIC
 ---------------------------------------------------------------------
 local function getTeamColor(player)
-    -- Excluded players always purple
     if excludedPlayers[player] then
-        return Color3.fromRGB(158, 60, 214)
+        return Color3.fromRGB(158, 60, 214) -- purple for excluded
     end
 
-    -- If team coloring is disabled, use default blue
     if not useTeamColoring then
         return defaultTeamColor
     end
 
     local localTeam = localPlayer and localPlayer.Team
 
-    -- If local player has no team, everyone is default blue
+    -- If no local team exists, just return defaultTeamColor
     if not localTeam then
         return defaultTeamColor
     end
@@ -110,15 +108,13 @@ local function getTeamColor(player)
         return defaultTeamColor
     end
 
-    -- Try to get player.TeamColor if it exists
-    if player.TeamColor then
-        return player.TeamColor.Color
-    end
+    -- Return player's TeamColor if available
+    local ok, teamColor = pcall(function()
+        return player.TeamColor and player.TeamColor.Color
+    end)
 
-    -- FINAL FALLBACK: default blue
-    return defaultTeamColor
+    return ok and teamColor or defaultTeamColor
 end
-
 
 ---------------------------------------------------------------------
 -- CLEANUP WHEN PLAYER LEAVES
