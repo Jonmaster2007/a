@@ -12,7 +12,7 @@ local excludedPlayers = _G.ExcludedPlayers
 local nameTagsEnabled = false
 local healthTagsEnabled = true
 local distanceTagsEnabled = true
-local useTeamColoring = false
+local useTeamColoring = true
 
 local defaultTeamColor = Color3.fromRGB(0,140,250)
 local neutralColor = Color3.fromRGB(255,255,255)
@@ -80,17 +80,19 @@ end
 -- TEAM COLOR LOGIC
 ---------------------------------------------------------------------
 local function getTeamColor(player)
+    -- Excluded players always purple
     if excludedPlayers[player] then
-        return Color3.fromRGB(158, 60, 214) -- purple for excluded
+        return Color3.fromRGB(158, 60, 214)
     end
 
+    -- If team coloring is disabled, use default blue
     if not useTeamColoring then
         return defaultTeamColor
     end
 
     local localTeam = localPlayer and localPlayer.Team
 
-    -- If no local team exists, just return defaultTeamColor
+    -- If local player has no team, everyone is default blue
     if not localTeam then
         return defaultTeamColor
     end
@@ -108,13 +110,15 @@ local function getTeamColor(player)
         return defaultTeamColor
     end
 
-    -- Return player's TeamColor if available
-    local ok, teamColor = pcall(function()
-        return player.TeamColor and player.TeamColor.Color
-    end)
+    -- Try to get player.TeamColor if it exists
+    if player.TeamColor then
+        return player.TeamColor.Color
+    end
 
-    return ok and teamColor or defaultTeamColor
+    -- FINAL FALLBACK: default blue
+    return defaultTeamColor
 end
+
 
 ---------------------------------------------------------------------
 -- CLEANUP WHEN PLAYER LEAVES
