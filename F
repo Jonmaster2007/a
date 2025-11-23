@@ -80,42 +80,40 @@ end
 -- TEAM COLOR LOGIC
 ---------------------------------------------------------------------
 local function getTeamColor(player)
+    -- EXCLUDED always purple
     if excludedPlayers[player] then
-        return Color3.fromRGB(158, 60, 214) -- purple for excluded
+        return Color3.fromRGB(158, 60, 214)
     end
 
     if not useTeamColoring then
         return defaultTeamColor
     end
 
-    local localTeam = localPlayer and localPlayer.Team
+    local localTeam = localPlayer.Team
+    local playerTeam = player.Team
 
-    -- If no local team exists, just return defaultTeamColor
-    if not localTeam then
+    -- If teams don't exist or aren't used, everyone gets default blue
+    if not localTeam or not playerTeam then
         return defaultTeamColor
     end
 
-    -- SAME TEAM CHECK (ignores excluded players)
-    local allSame = true
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= localPlayer and not excludedPlayers[plr] and plr.Team ~= localTeam then
-            allSame = false
-            break
-        end
-    end
-
-    if allSame then
+    -- SAME TEAM → default blue
+    if playerTeam == localTeam then
         return defaultTeamColor
     end
 
-    -- Return player's TeamColor if available
-    local ok, teamColor = pcall(function()
-        return player.TeamColor and player.TeamColor.Color
+    -- Different team → return enemy color
+    local ok, col = pcall(function()
+        return playerTeam.TeamColor.Color
     end)
 
-    return ok and teamColor or defaultTeamColor
-end
+    if ok and col then
+        return col
+    end
 
+    -- Fallback → default blue
+    return defaultTeamColor
+end
 ---------------------------------------------------------------------
 -- CLEANUP WHEN PLAYER LEAVES
 ---------------------------------------------------------------------
