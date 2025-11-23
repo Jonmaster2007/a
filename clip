@@ -1,5 +1,3 @@
--- Fully Safe Noclip Module (converted to use your command-style logic)
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
@@ -8,19 +6,20 @@ local floatName = "HumanoidRootPart"
 
 local Clip = true
 local Noclipping = nil
+local wasNoclipBeforeDeath = false
 
 _G.NoclipModule = {}
 
 -------------------------------------------------------------
--- INTERNAL: The working noclip loop you prefer
+-- INTERNAL noclip loop
 -------------------------------------------------------------
 local function NoclipLoop()
     local char = LocalPlayer.Character
     if Clip or not char then return end
 
     for _, child in ipairs(char:GetDescendants()) do
-        if child:IsA("BasePart") 
-            and child.CanCollide == true 
+        if child:IsA("BasePart")
+            and child.CanCollide == true
             and child.Name ~= floatName then
 
             child.CanCollide = false
@@ -29,15 +28,14 @@ local function NoclipLoop()
 end
 
 -------------------------------------------------------------
--- PUBLIC: Enable noclip
+-- Enable noclip
 -------------------------------------------------------------
 function _G.NoclipModule.noclip()
-    if not Clip then return end
-    
     Clip = false
+    wasNoclipBeforeDeath = true
+
     task.wait(0.1)
 
-    -- Ensure fresh connection
     if Noclipping then
         Noclipping:Disconnect()
     end
@@ -46,12 +44,12 @@ function _G.NoclipModule.noclip()
 end
 
 -------------------------------------------------------------
--- PUBLIC: Disable noclip
+-- Disable noclip
 -------------------------------------------------------------
 function _G.NoclipModule.clip()
     Clip = true
+    wasNoclipBeforeDeath = false
 
-    -- Stop loop
     if Noclipping then
         Noclipping:Disconnect()
         Noclipping = nil
@@ -59,7 +57,7 @@ function _G.NoclipModule.clip()
 end
 
 -------------------------------------------------------------
--- PUBLIC: Toggle noclip
+-- Toggle noclip
 -------------------------------------------------------------
 function _G.NoclipModule.toggle()
     if Clip then
@@ -68,3 +66,16 @@ function _G.NoclipModule.toggle()
         _G.NoclipModule.clip()
     end
 end
+
+-------------------------------------------------------------
+-- RESPAWN SUPPORT ⭐⭐⭐⭐⭐
+-------------------------------------------------------------
+LocalPlayer.CharacterAdded:Connect(function(char)
+    -- small wait so Roblox finishes building physics
+    task.wait(0.3)
+
+    if wasNoclipBeforeDeath then
+        -- re-enable automatically after respawn
+        _G.NoclipModule.noclip()
+    end
+end)
