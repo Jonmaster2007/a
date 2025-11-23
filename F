@@ -9,10 +9,24 @@ _G.ExcludedPlayers = _G.ExcludedPlayers or {}
 local excludedPlayers = _G.ExcludedPlayers
 
 -- SETTINGS
-local nameTagsEnabled = false
-local healthTagsEnabled = true
-local distanceTagsEnabled = true
-local useTeamColoring = true
+local module = {}
+
+function module.toggleNameTags(state)
+    nameTagsEnabled = state
+end
+
+function module.toggleHealthTags(state)
+    healthTagsEnabled = state
+end
+
+function module.toggleDistance(state)
+    distanceTagsEnabled = state
+end
+
+function module.toggleTeamColoring(state)
+    useTeamColoring = state
+end
+
 
 local defaultTeamColor = Color3.fromRGB(0,140,250)
 local neutralColor = Color3.fromRGB(255,255,255)
