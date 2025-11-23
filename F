@@ -77,32 +77,35 @@ end
 -- TEAM COLOR LOGIC
 ---------------------------------------------------------------------
 local function getTeamColor(player)
-	-- priority: EXCLUDED → team coloring → neutral
-	if excludedPlayers[player] then
-		return excludedColor
-	end
+    if excludedPlayers[player] then
+        return excludedColor
+    end
 
-	if not useTeamColoring then
-		return neutralColor
-	end
+    if not useTeamColoring then 
+        return neutralColor 
+    end
 
-	local localTeam = localPlayer.Team
-	local allSame = true
+    local localTeam = localPlayer.Team
+    local allSame = true
 
-	for _, plr in ipairs(Players:GetPlayers()) do
-		if plr ~= localPlayer and plr.Team ~= localTeam then
-			allSame = false
-			break
-		end
-	end
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= localPlayer and plr.Team ~= localTeam then
+            allSame = false
+            break
+        end
+    end
 
-	if allSame then
-		return defaultTeamColor
-	elseif player and player.TeamColor then
-		return player.TeamColor.Color
-	else
-		return defaultTeamColor
-	end
+    -- still all same team → use default blue
+    if allSame then
+        return defaultTeamColor
+    end
+
+    -- SAFE team color check
+    if player and player.Team and player.Team.TeamColor then
+        return player.Team.TeamColor.Color
+    end
+
+    return defaultTeamColor
 end
 
 ---------------------------------------------------------------------
