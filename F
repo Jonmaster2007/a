@@ -80,22 +80,19 @@ end
 -- TEAM COLOR LOGIC
 ---------------------------------------------------------------------
 local function getTeamColor(player)
-    if not useTeamColoring then 
-        return neutralColor 
-    end
-
-    if not player then 
-        return neutralColor 
-    end
-
-    -- EXCLUDED OVERRIDE: PURPLE
     if excludedPlayers[player] then
-        return Color3.fromRGB(150, 0, 200)
+        return Color3.fromRGB(158, 60, 214) -- purple for excluded
+    end
+
+    if not useTeamColoring then
+        return defaultTeamColor
     end
 
     local localTeam = localPlayer and localPlayer.Team
+
+    -- If no local team exists, just return defaultTeamColor
     if not localTeam then
-        return neutralColor
+        return defaultTeamColor
     end
 
     -- SAME TEAM CHECK (ignores excluded players)
@@ -111,33 +108,12 @@ local function getTeamColor(player)
         return defaultTeamColor
     end
 
-    -- Default to player.TeamColor if set
+    -- Return player's TeamColor if available
     local ok, teamColor = pcall(function()
         return player.TeamColor and player.TeamColor.Color
     end)
 
-    return ok and teamColor or neutralColor
-end
-
----------------------------------------------------------------------
--- EXPORTED MODULE
----------------------------------------------------------------------
-local module = {}
-
-function module.toggleNameTags(v)
-	nameTagsEnabled = v
-end
-
-function module.toggleHealthTags(v)
-	healthTagsEnabled = v
-end
-
-function module.toggleDistance(v)
-	distanceTagsEnabled = v
-end
-
-function module.toggleTeamColoring(v)
-	useTeamColoring = v
+    return ok and teamColor or defaultTeamColor
 end
 
 ---------------------------------------------------------------------
@@ -190,7 +166,7 @@ RunService.RenderStepped:Connect(function()
                 -- EXCLUDED FIRST — overrides all color logic
                 local tagColor
                 if excludedPlayers[player] then
-                    tagColor = Color3.fromRGB(150, 0, 200)
+                    tagColor = Color3.fromRGB(158, 60, 214)
                 else
                     tagColor = getTeamColor(player)
                 end
