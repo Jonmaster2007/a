@@ -84,25 +84,24 @@ local function getTeamColor(player)
         return neutralColor 
     end
 
-    -- safety check
     if not player then 
         return neutralColor 
     end
 
-    -- excluded player override (PURPLE)
+    -- EXCLUDED OVERRIDE: PURPLE
     if excludedPlayers[player] then
         return Color3.fromRGB(150, 0, 200)
     end
 
-    -- same team check
     local localTeam = localPlayer and localPlayer.Team
     if not localTeam then
         return neutralColor
     end
 
+    -- SAME TEAM CHECK (ignores excluded players)
     local allSame = true
     for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= localPlayer and plr.Team ~= localTeam then
+        if plr ~= localPlayer and not excludedPlayers[plr] and plr.Team ~= localTeam then
             allSame = false
             break
         end
@@ -112,7 +111,7 @@ local function getTeamColor(player)
         return defaultTeamColor
     end
 
-    -- Roblox sometimes returns nil for TeamColor before Character loads
+    -- Default to player.TeamColor if set
     local ok, teamColor = pcall(function()
         return player.TeamColor and player.TeamColor.Color
     end)
