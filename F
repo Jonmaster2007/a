@@ -77,7 +77,14 @@ end
 -- TEAM COLOR LOGIC
 ---------------------------------------------------------------------
 local function getTeamColor(player)
-	if not useTeamColoring then return neutralColor end
+	-- priority: EXCLUDED → team coloring → neutral
+	if excludedPlayers[player] then
+		return excludedColor
+	end
+
+	if not useTeamColoring then
+		return neutralColor
+	end
 
 	local localTeam = localPlayer.Team
 	local allSame = true
