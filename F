@@ -9,6 +9,12 @@ _G.ExcludedPlayers = _G.ExcludedPlayers or {}
 local excludedPlayers = _G.ExcludedPlayers
 
 -- SETTINGS
+
+local nameTagsEnabled = false 
+local healthTagsEnabled = true 
+local distanceTagsEnabled = true 
+local useTeamColoring = true
+
 local module = {}
 
 function module.toggleNameTags(state)
