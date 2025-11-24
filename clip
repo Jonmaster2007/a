@@ -19,9 +19,8 @@ local function NoclipLoop()
 
     for _, child in ipairs(char:GetDescendants()) do
         if child:IsA("BasePart")
-            and child.CanCollide == true
-            and child.Name ~= floatName then
-
+        and child.CanCollide == true
+        and child.Name ~= floatName then
             child.CanCollide = false
         end
     end
@@ -34,7 +33,7 @@ function _G.NoclipModule.noclip()
     Clip = false
     wasNoclipBeforeDeath = true
 
-    task.wait(0.1)
+    task.wait(0.05)
 
     if Noclipping then
         Noclipping:Disconnect()
@@ -48,7 +47,9 @@ end
 -------------------------------------------------------------
 function _G.NoclipModule.clip()
     Clip = true
-    wasNoclipBeforeDeath = false
+
+    -- ✔ do NOT clear wasNoclipBeforeDeath here
+    -- (otherwise respawn breaks)
 
     if Noclipping then
         Noclipping:Disconnect()
@@ -68,14 +69,21 @@ function _G.NoclipModule.toggle()
 end
 
 -------------------------------------------------------------
--- RESPAWN SUPPORT ⭐⭐⭐⭐⭐
+-- RESPAWN SUPPORT (stable)
 -------------------------------------------------------------
 LocalPlayer.CharacterAdded:Connect(function(char)
-    -- small wait so Roblox finishes building physics
-    task.wait(0.3)
+    task.wait(1) -- ensure ALL parts exist
 
+    -- safe check
     if wasNoclipBeforeDeath then
-        -- re-enable automatically after respawn
         _G.NoclipModule.noclip()
     end
+end)
+
+-------------------------------------------------------------
+-- Detect final respawn (when player is fully loaded)
+-------------------------------------------------------------
+LocalPlayer.CharacterRemoving:Connect(function()
+    -- don't touch wasNoclipBeforeDeath
+    -- it must remain TRUE so respawn logic works
 end)
