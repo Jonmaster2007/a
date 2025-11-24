@@ -1,0 +1,590 @@
+
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+
+local AFK_TIME = 10
+local AFK_THRESHOLD = 4
+local espEnabled = true
+
+-- Data tracking
+local boxDrawings = {}
+local nameDrawings = {}
+local lastPositions = {}
+local afkTimers = {}
+local playerTeamColors = {}
+local allDrawings = {} -- track all Drawing objects
+
+-- safe removal and cleanup
+local function safeRemoveObject(obj)
+	if not obj then return end
+	if obj.Remove then
+		pcall(function() obj:Remove() end)
+	end
+	allDrawings[obj] = nil
+end
+
+local function cleanupUnusedDrawings(aliveSet)
+	for obj in pairs(allDrawings) do
+		if not aliveSet[obj] then
+			safeRemoveObject(obj)
+		end
+	end
+end
+
+--// Create or reuse drawings safely
+local function createDrawings(player)
+	if player == LocalPlayer then return end
+
+	-- destroy stale data if somehow present
+	if boxDrawings[player] then
+		for _, d in pairs(boxDrawings[player]) do
+			if d and d.Remove then
+				pcall(function() d:Remove() end)
+			end
+			allDrawings[d] = nil
+		end
+	end
+
+	boxDrawings[player] = {}
+	local data = boxDrawings[player]
+
+	local box = Drawing.new("Square")
+	box.Thickness = 1.5
+	box.Filled = false
+	box.Visible = false
+
+	local name = Drawing.new("Text")
+	name.Center = true
+	name.Outline = true
+	name.Size = 15
+	name.Visible = false
+
+	data.box = box
+	data.name = name
+
+	allDrawings[box] = true
+	allDrawings[name] = true
+end
+
+local function removeDrawings(player)
+	local data = boxDrawings[player]
+	if not data then return end
+	for _, d in pairs(data) do
+		if d and d.Remove then
+			pcall(function() d:Remove() end)
+			allDrawings[d] = nil
+		end
+	end
+	boxDrawings[player] = nil
+end
+
+--// AFK detection (smooth + frame-time aware)
+local function checkForAFK(player, rootPos, deltaTime)
+	local last = lastPositions[player]
+	local afkTime = afkTimers[player] or 0
+
+	if last then
+		local moved = (rootPos - last).Magnitude > AFK_THRESHOLD
+		if moved then
+			-- Reset if they moved enough
+			afkTime = 0
+			lastPositions[player] = rootPos
+		else
+			-- Add elapsed time since last frame
+			afkTime += deltaTime
+		end
+	else
+		lastPositions[player] = rootPos
+		afkTime = 0
+	end
+
+	afkTimers[player] = afkTime
+	return afkTime >= AFK_TIME
+end
+
+--// Assign team color from Jacket color (handles multiple, case-insensitive)
+local function assignTeamColor(player)
+	local character = player.Character
+	if not character then return end
+
+	local foundColor = nil
+
+	-- Search through all descendants for any "Jacket"-like BasePart
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if descendant:IsA("BasePart") and string.lower(descendant.Name) == "jacket" then
+			foundColor = descendant.Color
+			break
+		end
+	end
+
+	if foundColor then
+		playerTeamColors[player] = foundColor
+	else
+		playerTeamColors[player] = Color3.new(1, 1, 1) -- default white if no match
+	end
+end
+
+--// dynamic camera-aligned full-body box (centered + distance-corrected)
+local function getBoxCorners(character)
+	local hrp  = character:FindFirstChild("HumanoidRootPart")
+	local head = character:FindFirstChild("Head")
+	local hum  = character:FindFirstChildOfClass("Humanoid")
+	if not (hrp and head and hum) then return end
+
+	-- top & bottom points of player
+	local topWorld    = head.Position + Vector3.new(0, 1.2, 0)
+	local bottomWorld = hrp.Position - Vector3.new(0, 3, 0)
+
+	local top, topVis = Camera:WorldToViewportPoint(topWorld)
+	local bottom, bottomVis = Camera:WorldToViewportPoint(bottomWorld)
+	if not (topVis and bottomVis) then return end
+
+	-- project left/right using camera right vector
+	local camRight = Camera.CFrame.RightVector
+	local baseWidth = 2.5
+	local rightWorld = hrp.Position + camRight * baseWidth
+	local leftWorld  = hrp.Position - camRight * baseWidth
+	local right, rVis = Camera:WorldToViewportPoint(rightWorld)
+	local left,  lVis = Camera:WorldToViewportPoint(leftWorld)
+	if not (rVis and lVis) then return end
+
+	-- compute box dimensions safely
+	local width  = math.max(math.abs(right.X - left.X), 1)
+	local height = math.max(math.abs(bottom.Y - top.Y) * 1.2, 1)
+
+	-- center and return
+	local centerX = (left.X + right.X) / 2
+	local topY = math.min(top.Y, bottom.Y)
+	local boxPos = Vector2.new(centerX - (width / 2), topY)
+	local boxSize = Vector2.new(width, height)
+
+	return boxPos, boxSize, true
+end
+
+--// Main ESP update loop
+RunService.RenderStepped:Connect(function(deltaTime)
+	if not espEnabled then return end
+
+	local alive = {} -- track drawings used this frame
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+			local char = player.Character
+			local hrp = char.HumanoidRootPart
+
+			createDrawings(player)
+			assignTeamColor(player)
+
+			local color = playerTeamColors[player] or Color3.new(1,1,1)
+			local isAFK = checkForAFK(player, hrp.Position, deltaTime)
+			local boxColor = isAFK and Color3.new(1,0,0) or color
+
+			local boxPos, boxSize, visible = getBoxCorners(char)
+			local data = boxDrawings[player]
+			local box = data and data.box
+            local name = data and data.name
+            
+			if visible and boxPos and boxSize then
+				local dist = (Camera.CFrame.Position - hrp.Position).Magnitude
+				local scale = math.clamp(1 - (dist / 1200), 0.25, 1)
+
+				box.Position = boxPos
+				box.Size = boxSize * scale
+				box.Color = boxColor
+				box.Visible = true
+				alive[box] = true
+
+				name.Text = player.Name
+				name.Position = Vector2.new(boxPos.X + (box.Size.X / 2), boxPos.Y - 18)
+				name.Color = color
+				name.Visible = true
+				name.Font = 3
+				name.Size = 18
+				alive[name] = true
+			else
+				box.Visible = false
+				name.Visible = false
+			end
+		else
+			removeDrawings(player)
+		end
+	end
+end)
+
+--// Handle new players and respawns safely
+local function onPlayerAdded(player)
+	if player == LocalPlayer then return end
+
+	player.CharacterRemoving:Connect(function()
+		removeDrawings(player)
+	end)
+
+	player.CharacterAdded:Connect(function(char)
+		removeDrawings(player) -- immediately nuke old
+		char:WaitForChild("HumanoidRootPart", 5)
+		task.wait(0.2)
+		assignTeamColor(player)
+		createDrawings(player)
+	end)
+end
+
+for _, p in ipairs(Players:GetPlayers()) do
+	if p ~= LocalPlayer then
+		onPlayerAdded(p)
+	end
+end
+
+Players.PlayerAdded:Connect(onPlayerAdded)
+Players.PlayerRemoving:Connect(removeDrawings)
+
+--// Periodically refresh jacket-based team colors
+task.spawn(function()
+	while true do
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player ~= LocalPlayer and player.Character then
+				assignTeamColor(player)
+			end
+		end
+		task.wait(1) -- update every 1 second
+	end
+end)
+
+--// Toggle ESP with Shift + I
+UserInputService.InputBegan:Connect(function(input, gpe)
+    -- run regardless of gpe, so both your script and the game’s bind trigger
+    if input.KeyCode == Enum.KeyCode.I and UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+        espEnabled = not espEnabled
+
+        if not espEnabled then
+            for _, p in pairs(Players:GetPlayers()) do
+                removeDrawings(p)
+            end
+        end
+    end
+end)
+
+
+
+
+
+loadstring(game:HttpGet('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'))()
+
+
+
+--// FULL DRAWING ITEM + GROUPED ESP (Shift+K = normal, Shift+L = grouped)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+local Camera = Workspace.CurrentCamera
+
+-- Constants
+local NOTE_NAME = "Note"
+local CASH_PARENT_NAME = "Cash"
+local FAKE_CASH_PARENT_NAME = "FakeCash"
+local ROOT_PART_NAME = "Root"
+local MAX_DISTANCE = 900
+local MIN_TEXT_SIZE = 14
+local MAX_TEXT_SIZE = 30
+local GROUP_RADIUS = 35 -- distance to group nearby cash/fake cash
+local EXCLUDED_POSITION = Vector3.new(-472, 33, 418)
+local EXCLUSION_RADIUS = 10
+
+-- ESP state
+local espEnabled = true
+local groupedMode = false
+local drawings = {}
+local groupDrawings = {}
+
+-- Helpers
+local function isExcluded(part)
+	return (part.Position - EXCLUDED_POSITION).Magnitude <= EXCLUSION_RADIUS
+end
+
+local function createText(text, color)
+	local t = Drawing.new("Text")
+	t.Text = text
+	t.Color = color
+	t.Size = MAX_TEXT_SIZE
+	t.Center = true
+	t.Outline = true
+	t.OutlineColor = Color3.new(0, 0, 0)
+	t.Font = 4
+	t.Visible = false
+	return t
+end
+
+local function clearDrawings()
+	for part, obj in pairs(drawings) do
+		if obj then
+			obj.Visible = false
+			if obj.Remove then
+				pcall(function() obj:Remove() end)
+			end
+		end
+	end
+	drawings = {}
+end
+
+local function clearGroupDrawings()
+	for _, g in pairs(groupDrawings) do
+		local obj = g.text
+		if obj then
+			obj.Visible = false
+			if obj.Remove then
+				pcall(function() obj:Remove() end)
+			end
+		end
+	end
+	groupDrawings = {}
+end
+
+local function addESP(part, text, color)
+	if isExcluded(part) then return end
+	local t = createText(text, color)
+	drawings[part] = t
+end
+
+-- Limo ESP support
+local limoText = nil
+local limoModel = nil
+local LIMO_NAME = "Limo"
+
+-- Creates ESP for the Limo model
+local function setupLimoESP()
+	if limoText then
+		pcall(function() limoText:Remove() end)
+	end
+
+	limoModel = Workspace:FindFirstChild(LIMO_NAME)
+	if not limoModel then return end
+
+	limoText = createText("Limo", Color3.fromRGB(173, 216, 230))
+end
+
+-- Scan workspace for all target parts (and Limo)
+local function scanForItems()
+	clearDrawings()
+	
+	for _, part in ipairs(Workspace:GetDescendants()) do
+		if part:IsA("BasePart") then
+			if part.Name == NOTE_NAME then
+				addESP(part, "PJ", Color3.new(30.1, 30.1, 30.1))
+
+			elseif part.Name == ROOT_PART_NAME and part.Parent and part.Parent.Name == CASH_PARENT_NAME then
+				addESP(part, "$", Color3.fromRGB(0,145,250))
+
+			elseif part.Name == ROOT_PART_NAME and part.Parent and part.Parent.Name == FAKE_CASH_PARENT_NAME then
+				addESP(part, "£", Color3.fromRGB(215,20,20))
+
+			elseif part.Name == "Label" and part.Parent and part.Parent.Name == "Bottle" then
+				addESP(part, "SB", Color3.fromRGB(255,235,150))
+
+			-- ✅ Fixed grenade handling (model-based)
+			elseif part.Parent and part.Parent.Name == "Grenade" then
+				local grenadeModel = part.Parent
+				local mainPart = grenadeModel:FindFirstChildWhichIsA("BasePart", true)
+				if mainPart then
+					addESP(mainPart, "G", Color3.fromRGB(0,185,45))
+				end
+			end
+		end
+	end
+
+	-- Setup Limo ESP after scanning
+	setupLimoESP()
+end
+
+
+-- Dynamic item addition
+Workspace.DescendantAdded:Connect(function(descendant)
+	if not espEnabled then return end
+
+	-- If a grenade model spawns
+	if descendant:IsA("Model") and descendant.Name == "Grenade" then
+		local mainPart = descendant:FindFirstChildWhichIsA("BasePart", true)
+		if mainPart then
+			addESP(mainPart, "G", Color3.fromRGB(0,185,45))
+		end
+	end
+
+	-- Regular part-based additions
+	if descendant:IsA("BasePart") then
+		if descendant.Name == NOTE_NAME then
+			addESP(descendant, "PJ", Color3.new(30.1,30.1,30.1))
+
+		elseif descendant.Name == ROOT_PART_NAME and descendant.Parent and descendant.Parent.Name == CASH_PARENT_NAME then
+			addESP(descendant, "$", Color3.fromRGB(0,145,250))
+
+		elseif descendant.Name == ROOT_PART_NAME and descendant.Parent and descendant.Parent.Name == FAKE_CASH_PARENT_NAME then
+			addESP(descendant, "£", Color3.fromRGB(215,20,20))
+
+		elseif descendant.Name == "Label" and descendant.Parent and descendant.Parent.Name == "Bottle" then
+			addESP(descendant, "SB", Color3.fromRGB(255,235,150))
+
+		elseif descendant.Parent and descendant.Parent.Name == "Grenade" then
+			local grenadeModel = descendant.Parent
+			local mainPart = grenadeModel:FindFirstChildWhichIsA("BasePart", true)
+			if mainPart then
+				addESP(mainPart, "G", Color3.fromRGB(0,185,45))
+			end
+		end
+	end
+end)
+
+
+-- Grouping system for nearby cash/fake cash
+local function updateGrouping()
+	clearGroupDrawings()
+	if not groupedMode then return end
+
+	local items = {}
+	for part, textObj in pairs(drawings) do
+		if part and part.Parent and textObj.Text == "$" or textObj.Text == "£" then
+			table.insert(items, {part = part, symbol = textObj.Text, color = textObj.Color})
+		end
+	end
+
+	local processed = {}
+	for i, item in ipairs(items) do
+		if not processed[item.part] then
+			local group = {item}
+			local sumPos = item.part.Position
+
+			for j = i + 1, #items do
+				local other = items[j]
+				if not processed[other.part] and other.symbol == item.symbol then
+					if (other.part.Position - item.part.Position).Magnitude <= GROUP_RADIUS then
+						table.insert(group, other)
+						sumPos += other.part.Position
+						processed[other.part] = true
+					end
+				end
+			end
+
+			if #group > 1 then
+				local avgPos = sumPos / #group
+				local gText = createText(#group .. " " .. item.symbol, item.color)
+				groupDrawings[gText] = {parts = group, pos = avgPos, text = gText}
+			end
+		end
+	end
+end
+
+-- Update loop
+RunService.RenderStepped:Connect(function()
+if not espEnabled then return end
+
+	if not espEnabled then return end
+	local camPos = Camera.CFrame.Position
+
+	-- Hide grouped ones
+	local hiddenParts = {}
+	if groupedMode then
+		updateGrouping()
+		for _, g in pairs(groupDrawings) do
+			for _, p in ipairs(g.parts) do
+				hiddenParts[p.part] = true
+			end
+		end
+	end
+
+	-- Normal item updates
+	for part, textObj in pairs(drawings) do
+		if not part or not part.Parent then
+			if textObj.Remove then pcall(function() textObj:Remove() end) end
+			drawings[part] = nil
+		else
+			if hiddenParts[part] then
+				textObj.Visible = false
+			else
+				local pos, visible = Camera:WorldToViewportPoint(part.Position)
+				if visible then
+					local dist = (camPos - part.Position).Magnitude
+					local scale = math.clamp(1 - (dist / MAX_DISTANCE), 0, 1)
+					textObj.Size = MIN_TEXT_SIZE + (MAX_TEXT_SIZE - MIN_TEXT_SIZE) * scale
+					textObj.Position = Vector2.new(pos.X, pos.Y)
+					textObj.Visible = true
+				else
+					textObj.Visible = false
+				end
+			end
+		end
+	end
+
+	-- Group text updates
+	if groupedMode then
+		for _, g in pairs(groupDrawings) do
+			local pos, vis = Camera:WorldToViewportPoint(g.pos)
+			if vis then
+				local dist = (camPos - g.pos).Magnitude
+				local scale = math.clamp(1 - (dist / MAX_DISTANCE), 0, 1)
+				g.text.Size = MIN_TEXT_SIZE + (MAX_TEXT_SIZE - MIN_TEXT_SIZE) * scale
+				g.text.Position = Vector2.new(pos.X, pos.Y)
+				g.text.Visible = true
+			else
+				g.text.Visible = false
+			end
+		end
+	end
+
+    -- Limo ESP update
+    if limoText and limoModel and limoModel.Parent then
+    	local targetPos
+    	if limoModel.PrimaryPart then
+    		targetPos = limoModel.PrimaryPart.Position
+    	else
+    		targetPos = limoModel:GetPivot().Position
+    	end
+
+    	local pos, visible = Camera:WorldToViewportPoint(targetPos)
+    	if visible then
+    		local dist = (Camera.CFrame.Position - targetPos).Magnitude
+    		local scale = math.clamp(1 - (dist / MAX_DISTANCE), 0, 1)
+    		limoText.Size = MIN_TEXT_SIZE + (MAX_TEXT_SIZE - MIN_TEXT_SIZE) * scale
+    		limoText.Position = Vector2.new(pos.X, pos.Y)
+    		limoText.Visible = true
+    	else
+    		limoText.Visible = false
+    	end
+    else
+    	if limoText then limoText.Visible = false end
+    end
+end)
+
+-- Toggle for normal ESP
+UserInputService.InputBegan:Connect(function(input, gpe)
+
+	-- Shift + K toggles normal item ESP
+	if input.KeyCode == Enum.KeyCode.K and UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+		espEnabled = not espEnabled
+		if espEnabled then
+			scanForItems()
+		else
+			clearDrawings()
+			clearGroupDrawings()
+		end
+	end
+
+	-- Shift + L toggles grouped mode
+	if input.KeyCode == Enum.KeyCode.L and UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+		if not espEnabled then return end
+		groupedMode = not groupedMode
+		clearGroupDrawings()
+	end
+end)
+
+-- Initialize ESP on startup
+scanForItems()
+
+-- Detect Limo appearing later
+Workspace.ChildAdded:Connect(function(child)
+	if child.Name == LIMO_NAME then
+		setupLimoESP()
+	end
+end)
