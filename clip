@@ -18,8 +18,8 @@ local function NoclipLoop()
     if Clip or not char then return end
 
     for _, child in ipairs(char:GetDescendants()) do
-        if child:IsA("BasePart")
-        and child.CanCollide == true
+        if (child:IsA("BasePart") or child:IsA("MeshPart"))
+        and child.CanCollide
         and child.Name ~= floatName then
             child.CanCollide = false
         end
@@ -39,7 +39,8 @@ function _G.NoclipModule.noclip()
         Noclipping:Disconnect()
     end
 
-    Noclipping = RunService.Stepped:Connect(NoclipLoop)
+    -- Heartbeat is AFTER physics resolution
+    Noclipping = RunService.Heartbeat:Connect(NoclipLoop)
 end
 
 -------------------------------------------------------------
@@ -47,9 +48,6 @@ end
 -------------------------------------------------------------
 function _G.NoclipModule.clip()
     Clip = true
-
-    -- ✔ do NOT clear wasNoclipBeforeDeath here
-    -- (otherwise respawn breaks)
 
     if Noclipping then
         Noclipping:Disconnect()
@@ -74,16 +72,14 @@ end
 LocalPlayer.CharacterAdded:Connect(function(char)
     task.wait(1) -- ensure ALL parts exist
 
-    -- safe check
     if wasNoclipBeforeDeath then
         _G.NoclipModule.noclip()
     end
 end)
 
 -------------------------------------------------------------
--- Detect final respawn (when player is fully loaded)
+-- NO TOUCH (needed for respawn logic)
 -------------------------------------------------------------
 LocalPlayer.CharacterRemoving:Connect(function()
-    -- don't touch wasNoclipBeforeDeath
-    -- it must remain TRUE so respawn logic works
+    -- do not clear wasNoclipBeforeDeath
 end)
