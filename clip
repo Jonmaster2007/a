@@ -4,9 +4,10 @@ local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local floatName = "HumanoidRootPart"
 
+-- STATE
 local Clip = true
 local Noclipping = nil
-local wasNoclipBeforeDeath = false
+local keepEnabled = false -- controlled by your UI toggle
 
 _G.NoclipModule = {}
 
@@ -14,8 +15,10 @@ _G.NoclipModule = {}
 -- INTERNAL noclip loop
 -------------------------------------------------------------
 local function NoclipLoop()
+    if Clip then return end
+
     local char = LocalPlayer.Character
-    if Clip or not char then return end
+    if not char then return end
 
     for _, child in ipairs(char:GetDescendants()) do
         if (child:IsA("BasePart") or child:IsA("MeshPart"))
@@ -27,19 +30,23 @@ local function NoclipLoop()
 end
 
 -------------------------------------------------------------
+-- FULL CLEAN SHUTDOWN
+-------------------------------------------------------------
+local function disconnectLoop()
+    if Noclipping then
+        Noclipping:Disconnect()
+        Noclipping = nil
+    end
+end
+
+-------------------------------------------------------------
 -- Enable noclip
 -------------------------------------------------------------
 function _G.NoclipModule.noclip()
+    keepEnabled = true
     Clip = false
-    wasNoclipBeforeDeath = true
 
-    task.wait(0.05)
-
-    if Noclipping then
-        Noclipping:Disconnect()
-    end
-
-    -- Heartbeat is AFTER physics resolution
+    disconnectLoop()
     Noclipping = RunService.Heartbeat:Connect(NoclipLoop)
 end
 
@@ -47,12 +54,9 @@ end
 -- Disable noclip
 -------------------------------------------------------------
 function _G.NoclipModule.clip()
+    keepEnabled = false
     Clip = true
-
-    if Noclipping then
-        Noclipping:Disconnect()
-        Noclipping = nil
-    end
+    disconnectLoop()
 end
 
 -------------------------------------------------------------
@@ -67,19 +71,24 @@ function _G.NoclipModule.toggle()
 end
 
 -------------------------------------------------------------
--- RESPAWN SUPPORT (stable)
+-- Character Removing (death)
+-- Always force noclip OFF
 -------------------------------------------------------------
-LocalPlayer.CharacterAdded:Connect(function(char)
-    task.wait(1) -- ensure ALL parts exist
-
-    if wasNoclipBeforeDeath then
-        _G.NoclipModule.noclip()
-    end
+LocalPlayer.CharacterRemoving:Connect(function()
+    Clip = true
+    disconnectLoop()
 end)
 
 -------------------------------------------------------------
--- NO TOUCH (needed for respawn logic)
+-- Character Added (respawn)
+-- Restore noclip only if your UI toggle says so
 -------------------------------------------------------------
-LocalPlayer.CharacterRemoving:Connect(function()
-    -- do not clear wasNoclipBeforeDeath
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5) -- ensure parts exist
+
+    if keepEnabled then
+        _G.NoclipModule.noclip()
+    else
+        _G.NoclipModule.clip()
+    end
 end)
