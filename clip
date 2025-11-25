@@ -1,135 +1,60 @@
-local Players = game:GetService("Players")
+-- noclip module
 local RunService = game:GetService("RunService")
 
-local LocalPlayer = Players.LocalPlayer
-local floatName = "HumanoidRootPart"
-
+local NoclipConn = nil
 local Clip = true
-local Noclipping = nil
-local wasNoclipBeforeDeath = false
 
-_G.NoclipModule = {}
+local function noclip()
+    Clip = false
+    task.wait(0.1)
 
---------------------------------------------------------------------
--- HARD FORCE collision off (ragdoll-safe)
---------------------------------------------------------------------
-local function ForceNoCollide(char)
-    for _, child in ipairs(char:GetDescendants()) do
-        if (child:IsA("BasePart") or child:IsA("MeshPart"))
-        and child.Name ~= floatName then
-            if child.CanCollide then
-                child.CanCollide = false
-            end
-            child.CanQuery = false
-            child.CanTouch = false
-        end
+    if NoclipConn then
+        NoclipConn:Disconnect()
+        NoclipConn = nil
     end
-end
 
---------------------------------------------------------------------
--- INTERNAL noclip loop
---------------------------------------------------------------------
-local function NoclipLoop()
-    if Clip then return end
+    NoclipConn = RunService.Stepped:Connect(function()
+        local plr = game.Players.LocalPlayer
+        local char = plr and plr.Character
+        if Clip or not char then return end
 
-    local char = LocalPlayer.Character
-    if not char then return end
-
-    ForceNoCollide(char)
-end
-
---------------------------------------------------------------------
--- ragdoll and state-change protection
---------------------------------------------------------------------
-local function ProtectHumanoid(hum)
-    hum.StateChanged:Connect(function(_, new)
-        if Clip then return end
-
-        if new == Enum.HumanoidStateType.Ragdoll
-        or new == Enum.HumanoidStateType.Physics
-        or new == Enum.HumanoidStateType.FallingDown then
-            task.defer(function()
-                local char = hum.Parent
-                if char then
-                    ForceNoCollide(char)
-                end
-            end)
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
         end
     end)
 end
 
---------------------------------------------------------------------
--- Disconnect helper
---------------------------------------------------------------------
-local function disconnectLoop()
-    if Noclipping then
-        Noclipping:Disconnect()
-        Noclipping = nil
+local function clip()
+    Clip = true
+    if NoclipConn then
+        NoclipConn:Disconnect()
+        NoclipConn = nil
     end
-end
 
---------------------------------------------------------------------
--- Enable noclip
---------------------------------------------------------------------
-function _G.NoclipModule.noclip()
-    Clip = false
-    wasNoclipBeforeDeath = true
-
-    task.wait(0.05)
-
-    disconnectLoop()
-
-    local char = LocalPlayer.Character
+    -- restore collisions
+    local plr = game.Players.LocalPlayer
+    local char = plr and plr.Character
     if char then
-        ForceNoCollide(char)
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if hum then ProtectHumanoid(hum) end
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
+        end
     end
-
-    Noclipping = RunService.Heartbeat:Connect(NoclipLoop)
 end
 
---------------------------------------------------------------------
--- Disable noclip
---------------------------------------------------------------------
-function _G.NoclipModule.clip()
-    Clip = true
-    disconnectLoop()
-end
-
---------------------------------------------------------------------
--- Toggle
---------------------------------------------------------------------
-function _G.NoclipModule.toggle()
+local function toggle()
     if Clip then
-        _G.NoclipModule.noclip()
+        noclip()
     else
-        _G.NoclipModule.clip()
+        clip()
     end
 end
 
---------------------------------------------------------------------
--- Respawn support
---------------------------------------------------------------------
-LocalPlayer.CharacterAdded:Connect(function(char)
-    task.wait(1)
-
-    local hum = char:WaitForChild("Humanoid", 3)
-    if hum then ProtectHumanoid(hum) end
-
-    if wasNoclipBeforeDeath then
-        _G.NoclipModule.noclip()
-    end
-end)
-
---------------------------------------------------------------------
--- Death handling
---------------------------------------------------------------------
-LocalPlayer.CharacterRemoving:Connect(function()
-    Clip = true
-    disconnectLoop()
-
-    if _G.NoclipToggle_UI then
-        _G.NoclipToggle_UI:Set(false)
-    end
-end)
+_G.NoclipModule = {
+    noclip = noclip,
+    clip = clip,
+    toggle = toggle,
+}
