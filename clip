@@ -2,11 +2,10 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
-local floatName = "HumanoidRootPart"
+local floatName = "HumanoidRootPart"  -- ⬅️ you want HRP ignored
 
 local Clip = true
 local Noclipping = nil
-local wasNoclipBeforeDeath = false
 
 _G.NoclipModule = {}
 
@@ -27,15 +26,15 @@ local function NoclipLoop()
     end
 end
 
+
 -------------------------------------------------------------
 -- Enable noclip
 -------------------------------------------------------------
 function _G.NoclipModule.noclip()
     Clip = false
-    wasNoclipBeforeDeath = true
-
     task.wait(0.1)
 
+    -- always reconnect clean
     if Noclipping then
         Noclipping:Disconnect()
     end
@@ -43,18 +42,29 @@ function _G.NoclipModule.noclip()
     Noclipping = RunService.Stepped:Connect(NoclipLoop)
 end
 
+
 -------------------------------------------------------------
 -- Disable noclip
 -------------------------------------------------------------
 function _G.NoclipModule.clip()
     Clip = true
-    wasNoclipBeforeDeath = false
 
     if Noclipping then
         Noclipping:Disconnect()
         Noclipping = nil
     end
+
+    -- restore collisions for everything *except HRP*
+    local char = LocalPlayer.Character
+    if char then
+        for _, child in ipairs(char:GetDescendants()) do
+            if child:IsA("BasePart") and child.Name ~= floatName then
+                child.CanCollide = true
+            end
+        end
+    end
 end
+
 
 -------------------------------------------------------------
 -- Toggle noclip
@@ -66,16 +76,3 @@ function _G.NoclipModule.toggle()
         _G.NoclipModule.clip()
     end
 end
-
--------------------------------------------------------------
--- RESPAWN SUPPORT ⭐⭐⭐⭐⭐
--------------------------------------------------------------
-LocalPlayer.CharacterAdded:Connect(function(char)
-    -- small wait so Roblox finishes building physics
-    task.wait(0.3)
-
-    if wasNoclipBeforeDeath then
-        -- re-enable automatically after respawn
-        _G.NoclipModule.noclip()
-    end
-end)
