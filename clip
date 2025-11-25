@@ -10,25 +10,57 @@ local wasNoclipBeforeDeath = false
 
 _G.NoclipModule = {}
 
--------------------------------------------------------------
--- INTERNAL noclip loop
--------------------------------------------------------------
-local function NoclipLoop()
-    local char = LocalPlayer.Character
-    if Clip or not char then return end
-
+--------------------------------------------------------------------
+-- HARD FORCE collision off (ragdoll-safe)
+--------------------------------------------------------------------
+local function ForceNoCollide(char)
     for _, child in ipairs(char:GetDescendants()) do
         if (child:IsA("BasePart") or child:IsA("MeshPart"))
-        and child.CanCollide
         and child.Name ~= floatName then
-            child.CanCollide = false
+            if child.CanCollide then
+                child.CanCollide = false
+            end
+            child.CanQuery = false
+            child.CanTouch = false
         end
     end
 end
 
--------------------------------------------------------------
+--------------------------------------------------------------------
+-- INTERNAL noclip loop
+--------------------------------------------------------------------
+local function NoclipLoop()
+    if Clip then return end
+
+    local char = LocalPlayer.Character
+    if not char then return end
+
+    ForceNoCollide(char)
+end
+
+--------------------------------------------------------------------
+-- ragdoll and state-change protection
+--------------------------------------------------------------------
+local function ProtectHumanoid(hum)
+    hum.StateChanged:Connect(function(_, new)
+        if Clip then return end
+
+        if new == Enum.HumanoidStateType.Ragdoll
+        or new == Enum.HumanoidStateType.Physics
+        or new == Enum.HumanoidStateType.FallingDown then
+            task.defer(function()
+                local char = hum.Parent
+                if char then
+                    ForceNoCollide(char)
+                end
+            end)
+        end
+    end)
+end
+
+--------------------------------------------------------------------
 -- Disconnect helper
--------------------------------------------------------------
+--------------------------------------------------------------------
 local function disconnectLoop()
     if Noclipping then
         Noclipping:Disconnect()
@@ -36,9 +68,9 @@ local function disconnectLoop()
     end
 end
 
--------------------------------------------------------------
+--------------------------------------------------------------------
 -- Enable noclip
--------------------------------------------------------------
+--------------------------------------------------------------------
 function _G.NoclipModule.noclip()
     Clip = false
     wasNoclipBeforeDeath = true
@@ -46,20 +78,28 @@ function _G.NoclipModule.noclip()
     task.wait(0.05)
 
     disconnectLoop()
+
+    local char = LocalPlayer.Character
+    if char then
+        ForceNoCollide(char)
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then ProtectHumanoid(hum) end
+    end
+
     Noclipping = RunService.Heartbeat:Connect(NoclipLoop)
 end
 
--------------------------------------------------------------
+--------------------------------------------------------------------
 -- Disable noclip
--------------------------------------------------------------
+--------------------------------------------------------------------
 function _G.NoclipModule.clip()
     Clip = true
     disconnectLoop()
 end
 
--------------------------------------------------------------
--- Toggle noclip
--------------------------------------------------------------
+--------------------------------------------------------------------
+-- Toggle
+--------------------------------------------------------------------
 function _G.NoclipModule.toggle()
     if Clip then
         _G.NoclipModule.noclip()
@@ -68,25 +108,27 @@ function _G.NoclipModule.toggle()
     end
 end
 
--------------------------------------------------------------
--- RESPAWN SUPPORT (stable)
--------------------------------------------------------------
+--------------------------------------------------------------------
+-- Respawn support
+--------------------------------------------------------------------
 LocalPlayer.CharacterAdded:Connect(function(char)
-    task.wait(1) -- wait for parts to load
+    task.wait(1)
+
+    local hum = char:WaitForChild("Humanoid", 3)
+    if hum then ProtectHumanoid(hum) end
 
     if wasNoclipBeforeDeath then
         _G.NoclipModule.noclip()
     end
 end)
 
--------------------------------------------------------------
--- DEATH HANDLING — force UI toggle OFF
--------------------------------------------------------------
+--------------------------------------------------------------------
+-- Death handling
+--------------------------------------------------------------------
 LocalPlayer.CharacterRemoving:Connect(function()
     Clip = true
     disconnectLoop()
 
-    -- Force UI toggle to OFF if UI exists
     if _G.NoclipToggle_UI then
         _G.NoclipToggle_UI:Set(false)
     end
