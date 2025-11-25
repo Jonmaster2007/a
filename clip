@@ -1,6 +1,4 @@
---// noclip_module.lua
--- Full reset-on-toggle version (no respawn auto-reapply)
-
+-- identical behavior to your addcmd() version
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
@@ -12,52 +10,51 @@ local Noclipping = nil
 
 _G.NoclipModule = {}
 
--------------------------------------------------------------
--- INTERNAL noclip loop
--------------------------------------------------------------
-local function NoclipLoop()
-    local char = LocalPlayer.Character
-    if Clip or not char then return end
-
-    for _, child in ipairs(char:GetDescendants()) do
-        if child:IsA("BasePart")
-            and child.CanCollide == true
-            and child.Name ~= floatName then
-
-            child.CanCollide = false -- why: disable collisions only when noclip is on
-        end
-    end
-end
-
--------------------------------------------------------------
--- Enable noclip (fresh every time)
--------------------------------------------------------------
+--------------------------------------------------------------------
+-- noclip (EXACT behavior replication)
+--------------------------------------------------------------------
 function _G.NoclipModule.noclip()
     Clip = false
 
-    if Noclipping then
-        Noclipping:Disconnect() -- why: avoid duplicate loops after death
+    task.wait(0.1) -- same delay your original uses
+
+    -- internal loop recreated every time
+    local function NoclipLoop()
+        local char = LocalPlayer.Character
+        if Clip == false and char ~= nil then
+            for _, child in ipairs(char:GetDescendants()) do
+                if child:IsA("BasePart")
+                    and child.CanCollide == true
+                    and child.Name ~= floatName then
+
+                    child.CanCollide = false -- identical logic
+                end
+            end
+        end
     end
 
-    task.wait(0.1) -- allow character physics to exist
+    -- always replace previous loop
+    if Noclipping then
+        Noclipping:Disconnect()
+    end
+
     Noclipping = RunService.Stepped:Connect(NoclipLoop)
 end
 
--------------------------------------------------------------
--- Disable noclip
--------------------------------------------------------------
+--------------------------------------------------------------------
+-- clip
+--------------------------------------------------------------------
 function _G.NoclipModule.clip()
-    Clip = true
-
     if Noclipping then
         Noclipping:Disconnect()
-        Noclipping = nil -- why: ensure full reset
     end
+
+    Clip = true
 end
 
--------------------------------------------------------------
--- Toggle noclip
--------------------------------------------------------------
+--------------------------------------------------------------------
+-- toggle
+--------------------------------------------------------------------
 function _G.NoclipModule.toggle()
     if Clip then
         _G.NoclipModule.noclip()
