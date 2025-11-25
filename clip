@@ -4,10 +4,9 @@ local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local floatName = "HumanoidRootPart"
 
--- STATE
 local Clip = true
 local Noclipping = nil
-local keepEnabled = false -- controlled by your UI toggle
+local wasNoclipBeforeDeath = false
 
 _G.NoclipModule = {}
 
@@ -15,10 +14,8 @@ _G.NoclipModule = {}
 -- INTERNAL noclip loop
 -------------------------------------------------------------
 local function NoclipLoop()
-    if Clip then return end
-
     local char = LocalPlayer.Character
-    if not char then return end
+    if Clip or not char then return end
 
     for _, child in ipairs(char:GetDescendants()) do
         if (child:IsA("BasePart") or child:IsA("MeshPart"))
@@ -30,7 +27,7 @@ local function NoclipLoop()
 end
 
 -------------------------------------------------------------
--- FULL CLEAN SHUTDOWN
+-- Disconnect helper
 -------------------------------------------------------------
 local function disconnectLoop()
     if Noclipping then
@@ -43,8 +40,10 @@ end
 -- Enable noclip
 -------------------------------------------------------------
 function _G.NoclipModule.noclip()
-    keepEnabled = true
     Clip = false
+    wasNoclipBeforeDeath = true
+
+    task.wait(0.05)
 
     disconnectLoop()
     Noclipping = RunService.Heartbeat:Connect(NoclipLoop)
@@ -54,7 +53,6 @@ end
 -- Disable noclip
 -------------------------------------------------------------
 function _G.NoclipModule.clip()
-    keepEnabled = false
     Clip = true
     disconnectLoop()
 end
@@ -71,24 +69,25 @@ function _G.NoclipModule.toggle()
 end
 
 -------------------------------------------------------------
--- Character Removing (death)
--- Always force noclip OFF
+-- RESPAWN SUPPORT (stable)
+-------------------------------------------------------------
+LocalPlayer.CharacterAdded:Connect(function(char)
+    task.wait(1) -- wait for parts to load
+
+    if wasNoclipBeforeDeath then
+        _G.NoclipModule.noclip()
+    end
+end)
+
+-------------------------------------------------------------
+-- DEATH HANDLING — force UI toggle OFF
 -------------------------------------------------------------
 LocalPlayer.CharacterRemoving:Connect(function()
     Clip = true
     disconnectLoop()
-end)
 
--------------------------------------------------------------
--- Character Added (respawn)
--- Restore noclip only if your UI toggle says so
--------------------------------------------------------------
-LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(0.5) -- ensure parts exist
-
-    if keepEnabled then
-        _G.NoclipModule.noclip()
-    else
-        _G.NoclipModule.clip()
+    -- Force UI toggle to OFF if UI exists
+    if _G.NoclipToggle_UI then
+        _G.NoclipToggle_UI:Set(false)
     end
 end)
