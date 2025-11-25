@@ -1,72 +1,64 @@
--- unbreakable noclip module
-local RS = game:GetService("RunService")
-local LP = game.Players.LocalPlayer
+-- Corrected noclip module
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local floatName = "FloatPart" -- DO NOT SET THIS TO HumanoidRootPart
 
 local Clip = true
-local Conns = {}
+local Noclipping = nil
 
-local function forceNoCollide()
-    if Clip then return end
-    local char = LP.Character
-    if not char then return end
+_G.NoclipModule = {}
 
-    for _, part in ipairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then
-            -- why: repeated enforcing prevents external scripts from breaking noclip
-            part.CanCollide = false
+local function NoclipLoop()
+    local char = LocalPlayer.Character
+    if Clip or not char then return end
+
+    for _, child in ipairs(char:GetDescendants()) do
+        if child:IsA("BasePart")
+            and child.CanCollide == true
+            and child.Name ~= floatName then
+
+            child.CanCollide = false
         end
     end
 end
 
-local function connectLoops()
-    -- kill old connections
-    for _, c in ipairs(Conns) do
-        c:Disconnect()
-    end
-    Conns = {}
+function _G.NoclipModule.noclip()
+    if not Clip then return end
+    
+    Clip = false
+    task.wait(0.1)
 
-    table.insert(Conns, RS.RenderStepped:Connect(forceNoCollide))
-    table.insert(Conns, RS.Stepped:Connect(forceNoCollide))
-    table.insert(Conns, RS.Heartbeat:Connect(forceNoCollide))
+    if Noclipping then
+        Noclipping:Disconnect()
+    end
+
+    Noclipping = RunService.Stepped:Connect(NoclipLoop)
 end
 
-local function disconnectLoops()
-    for _, c in ipairs(Conns) do
-        c:Disconnect()
+function _G.NoclipModule.clip()
+    Clip = true
+    if Noclipping then
+        Noclipping:Disconnect()
+        Noclipping = nil
     end
-    Conns = {}
 
-    local char = LP.Character
+    -- restore collisions
+    local char = LocalPlayer.Character
     if char then
-        for _, part in ipairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = true
+        for _, child in ipairs(char:GetDescendants()) do
+            if child:IsA("BasePart") then
+                child.CanCollide = true
             end
         end
     end
 end
 
-
-local function noclip()
-    Clip = false
-    connectLoops()
-end
-
-local function clip()
-    Clip = true
-    disconnectLoops()
-end
-
-local function toggle()
+function _G.NoclipModule.toggle()
     if Clip then
-        noclip()
+        _G.NoclipModule.noclip()
     else
-        clip()
+        _G.NoclipModule.clip()
     end
 end
-
-_G.NoclipModule = {
-    noclip = noclip,
-    clip = clip,
-    toggle = toggle,
-}
