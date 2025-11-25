@@ -1,8 +1,11 @@
+--// noclip_module.lua
+-- Full reset-on-toggle version (no respawn auto-reapply)
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
-local floatName = "HumanoidRootPart"  -- ⬅️ you want HRP ignored
+local floatName = "HumanoidRootPart"
 
 local Clip = true
 local Noclipping = nil
@@ -21,27 +24,24 @@ local function NoclipLoop()
             and child.CanCollide == true
             and child.Name ~= floatName then
 
-            child.CanCollide = false
+            child.CanCollide = false -- why: disable collisions only when noclip is on
         end
     end
 end
 
-
 -------------------------------------------------------------
--- Enable noclip
+-- Enable noclip (fresh every time)
 -------------------------------------------------------------
 function _G.NoclipModule.noclip()
     Clip = false
-    task.wait(0.1)
 
-    -- always reconnect clean
     if Noclipping then
-        Noclipping:Disconnect()
+        Noclipping:Disconnect() -- why: avoid duplicate loops after death
     end
 
+    task.wait(0.1) -- allow character physics to exist
     Noclipping = RunService.Stepped:Connect(NoclipLoop)
 end
-
 
 -------------------------------------------------------------
 -- Disable noclip
@@ -51,20 +51,9 @@ function _G.NoclipModule.clip()
 
     if Noclipping then
         Noclipping:Disconnect()
-        Noclipping = nil
-    end
-
-    -- restore collisions for everything *except HRP*
-    local char = LocalPlayer.Character
-    if char then
-        for _, child in ipairs(char:GetDescendants()) do
-            if child:IsA("BasePart") and child.Name ~= floatName then
-                child.CanCollide = true
-            end
-        end
+        Noclipping = nil -- why: ensure full reset
     end
 end
-
 
 -------------------------------------------------------------
 -- Toggle noclip
