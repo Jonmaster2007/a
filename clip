@@ -1,41 +1,42 @@
--- noclip module
-local RunService = game:GetService("RunService")
+-- unbreakable noclip module
+local RS = game:GetService("RunService")
+local LP = game.Players.LocalPlayer
 
-local NoclipConn = nil
 local Clip = true
+local Conns = {}
 
-local function noclip()
-    Clip = false
-    task.wait(0.1)
+local function forceNoCollide()
+    if Clip then return end
+    local char = LP.Character
+    if not char then return end
 
-    if NoclipConn then
-        NoclipConn:Disconnect()
-        NoclipConn = nil
-    end
-
-    NoclipConn = RunService.Stepped:Connect(function()
-        local plr = game.Players.LocalPlayer
-        local char = plr and plr.Character
-        if Clip or not char then return end
-
-        for _, part in ipairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            -- why: repeated enforcing prevents external scripts from breaking noclip
+            part.CanCollide = false
         end
-    end)
+    end
 end
 
-local function clip()
-    Clip = true
-    if NoclipConn then
-        NoclipConn:Disconnect()
-        NoclipConn = nil
+local function connectLoops()
+    -- kill old connections
+    for _, c in ipairs(Conns) do
+        c:Disconnect()
     end
+    Conns = {}
 
-    -- restore collisions
-    local plr = game.Players.LocalPlayer
-    local char = plr and plr.Character
+    table.insert(Conns, RS.RenderStepped:Connect(forceNoCollide))
+    table.insert(Conns, RS.Stepped:Connect(forceNoCollide))
+    table.insert(Conns, RS.Heartbeat:Connect(forceNoCollide))
+end
+
+local function disconnectLoops()
+    for _, c in ipairs(Conns) do
+        c:Disconnect()
+    end
+    Conns = {}
+
+    local char = LP.Character
     if char then
         for _, part in ipairs(char:GetDescendants()) do
             if part:IsA("BasePart") then
@@ -43,6 +44,17 @@ local function clip()
             end
         end
     end
+end
+
+
+local function noclip()
+    Clip = false
+    connectLoops()
+end
+
+local function clip()
+    Clip = true
+    disconnectLoops()
 end
 
 local function toggle()
