@@ -1,78 +1,94 @@
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
 
-local LocalPlayer = Players.LocalPlayer
-local floatName = "HumanoidRootPart"  -- ⬅️ you want HRP ignored
+-- GREEN ROOM ROOT
+local greenRoot = Workspace
+    .Map.Special.MetroTunnels.Streaming.Places.GreenRoom.Base
 
-local Clip = true
-local Noclipping = nil
+local greenTargets = {
+    Vector3.new(878.6688842773438, -87.90919494628906, 50.37447738647461),
+    Vector3.new(879.6688842773438, -95.53419494628906, 49.99947738647461),
+    Vector3.new(879.6688842773438, -87.40919494628906, 49.99947738647461)
+}
 
-_G.NoclipModule = {}
+-- BRIDGE SUPPORTS ROOT
+local bridgeRoot = Workspace
+    .Map.Special.Bunker.Streaming.Base.Base.INTERIOR_EXPANSION.Supports.Other["Bridge Supports"]
 
--------------------------------------------------------------
--- INTERNAL noclip loop
--------------------------------------------------------------
-local function NoclipLoop()
-    local char = LocalPlayer.Character
-    if Clip or not char then return end
+local bridgeTargets = {
+    Vector3.new(-126.75, -10.0985718, 46),
+    Vector3.new(-126.75, -10.0985718, 5),
+    Vector3.new(-77, -10.0985718, 46),
+    Vector3.new(-77, -10.0985718, 5),
+}
 
-    for _, child in ipairs(char:GetDescendants()) do
-        if child:IsA("BasePart")
-            and child.CanCollide == true
-            and child.Name ~= floatName then
+-- Saved parts
+local savedParts = {}
 
-            child.CanCollide = false
+local function matchPosition(a, b)
+    return (a - b).Magnitude < 0.05
+end
+
+local function applyToPart(part)
+    if not savedParts[part] then
+        savedParts[part] = {
+            Transparency = part.Transparency,
+            CanCollide = part.CanCollide,
+            CanTouch = part.CanTouch,
+            CanQuery = part.CanQuery
+        }
+    end
+    part.Transparency = 0.6
+    part.CanCollide = false
+    part.CanTouch = false
+    part.CanQuery = false
+end
+
+-- enable parts
+local function enableParts()
+    -- wait a moment for all parts to load
+    task.wait(1)
+
+    -- GREEN ROOM
+    for _, part in ipairs(greenRoot:GetDescendants()) do
+        if part:IsA("BasePart") then
+            for _, pos in ipairs(greenTargets) do
+                if matchPosition(part.Position, pos) then
+                    applyToPart(part)
+                end
+            end
         end
     end
-end
 
-
--------------------------------------------------------------
--- Enable noclip
--------------------------------------------------------------
-function _G.NoclipModule.noclip()
-    Clip = false
-    task.wait(0.1)
-
-    -- always reconnect clean
-    if Noclipping then
-        Noclipping:Disconnect()
-    end
-
-    Noclipping = RunService.Stepped:Connect(NoclipLoop)
-end
-
-
--------------------------------------------------------------
--- Disable noclip
--------------------------------------------------------------
-function _G.NoclipModule.clip()
-    Clip = true
-
-    if Noclipping then
-        Noclipping:Disconnect()
-        Noclipping = nil
-    end
-
-    -- restore collisions for everything *except HRP*
-    local char = LocalPlayer.Character
-    if char then
-        for _, child in ipairs(char:GetDescendants()) do
-            if child:IsA("BasePart") and child.Name ~= floatName then
-                child.CanCollide = true
+    -- BRIDGE SUPPORTS (recursive GetDescendants will catch nested folders)
+    for _, part in ipairs(bridgeRoot:GetDescendants()) do
+        if part:IsA("BasePart") then
+            for _, pos in ipairs(bridgeTargets) do
+                if matchPosition(part.Position, pos) then
+                    applyToPart(part)
+                end
             end
         end
     end
 end
 
+-- disable parts
+local function disableParts()
+    for part, props in pairs(savedParts) do
+        if part and part.Parent then
+            part.Transparency = props.Transparency
+            part.CanCollide = props.CanCollide
+            part.CanTouch = props.CanTouch
+            part.CanQuery = props.CanQuery
+        end
+    end
+    savedParts = {}
+end
 
--------------------------------------------------------------
--- Toggle noclip
--------------------------------------------------------------
-function _G.NoclipModule.toggle()
-    if Clip then
-        _G.NoclipModule.noclip()
+-- global toggle
+_G.ToggleMetroParts = function(state)
+    if state then
+        enableParts()
     else
-        _G.NoclipModule.clip()
+        disableParts()
     end
 end
