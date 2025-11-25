@@ -1,22 +1,26 @@
--- Corrected noclip module
+-- Fully Safe Noclip Module (converted to use your command-style logic)
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
-local floatName = "FloatPart" -- DO NOT SET THIS TO HumanoidRootPart
+local floatName = "HumanoidRootPart"
 
 local Clip = true
 local Noclipping = nil
 
 _G.NoclipModule = {}
 
+-------------------------------------------------------------
+-- INTERNAL: The working noclip loop you prefer
+-------------------------------------------------------------
 local function NoclipLoop()
     local char = LocalPlayer.Character
     if Clip or not char then return end
 
     for _, child in ipairs(char:GetDescendants()) do
-        if child:IsA("BasePart")
-            and child.CanCollide == true
+        if child:IsA("BasePart") 
+            and child.CanCollide == true 
             and child.Name ~= floatName then
 
             child.CanCollide = false
@@ -24,12 +28,16 @@ local function NoclipLoop()
     end
 end
 
+-------------------------------------------------------------
+-- PUBLIC: Enable noclip
+-------------------------------------------------------------
 function _G.NoclipModule.noclip()
     if not Clip then return end
     
     Clip = false
     task.wait(0.1)
 
+    -- Ensure fresh connection
     if Noclipping then
         Noclipping:Disconnect()
     end
@@ -37,24 +45,22 @@ function _G.NoclipModule.noclip()
     Noclipping = RunService.Stepped:Connect(NoclipLoop)
 end
 
+-------------------------------------------------------------
+-- PUBLIC: Disable noclip
+-------------------------------------------------------------
 function _G.NoclipModule.clip()
     Clip = true
+
+    -- Stop loop
     if Noclipping then
         Noclipping:Disconnect()
         Noclipping = nil
     end
-
-    -- restore collisions
-    local char = LocalPlayer.Character
-    if char then
-        for _, child in ipairs(char:GetDescendants()) do
-            if child:IsA("BasePart") then
-                child.CanCollide = true
-            end
-        end
-    end
 end
 
+-------------------------------------------------------------
+-- PUBLIC: Toggle noclip
+-------------------------------------------------------------
 function _G.NoclipModule.toggle()
     if Clip then
         _G.NoclipModule.noclip()
