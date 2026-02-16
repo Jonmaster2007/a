@@ -1,0 +1,487 @@
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+
+local function httpGet(url)
+    if syn and syn.request then
+        return syn.request({ Url = url, Method = "GET" }).Body
+    elseif http_request then
+        return http_request({ Url = url, Method = "GET" }).Body
+    elseif request then
+        return request({ Url = url, Method = "GET" }).Body
+    else
+        error("No supported HTTP request function found")
+    end
+end
+
+local function normalize(s)
+    return (s or "")
+        :gsub("[%z\239\187\191]", "")
+        :gsub("^%s+", "")
+        :gsub("%s+$", "")
+        :lower()
+end
+
+local function CheckWhitelist()
+    local ok, enabled = pcall(function()
+        local url = "https://raw.githubusercontent.com/Jonmaster2007/a/main/Enabled."
+        local response = httpGet(url)
+
+        for line in response:gmatch("[^\r\n]+") do
+            local key, value = line:match("^(.-)%s*=%s*(.-)$")
+            if key and value then
+                if normalize(key) == "fly" then
+                    return normalize(value) == "true"
+                end
+            end
+        end
+
+        return false
+    end)
+
+    if not ok then
+        warn("[WHITELIST] HTTP failed")
+        return false
+    end
+
+    return enabled
+end
+
+if not CheckWhitelist() then
+    warn("Feature not enabled")
+    game.Players.LocalPlayer:Kick("Flying Feature has been disabled")
+end
+
+
+
+
+
+
+
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local Debris = game:GetService("Debris")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local PhysicsService = game:GetService("PhysicsService")
+
+local player = Players.LocalPlayer
+local camera = Workspace.CurrentCamera
+
+-- Cycle settings
+local gravityCycle = {80, 40, 20, 0}
+local gravityIndex = 1
+
+local velocityCycle = {155, 2, 35, 65, 105}
+local velocityIndex = 1
+
+local modeCycle = {"T Toggle", "Flying Toggle", "Off"}
+local modeIndex = 1
+
+local FORCE_UP = 1
+local BV_LIFETIME = 0.2
+
+local cachedParts = {}
+local character = nil
+
+-- Collision settings
+local collisionsDisabled = false
+local originalCollisionGroups = {}
+local originalTransparencies = {}
+local originalCanCollide = {}
+local NO_COLLISION_GROUP = "CarLauncher_NoCollision"
+
+-- Flying mode variables
+local activeBodyVelocity = nil
+local activeKeys = {}
+
+-- Setup collision group
+local function setupCollisionGroup()
+    -- Register the collision group if it doesn't exist
+    local success = pcall(function()
+        PhysicsService:RegisterCollisionGroup(NO_COLLISION_GROUP)
+    end)
+    
+    -- Make it not collide with Default group
+    pcall(function()
+        PhysicsService:CollisionGroupSetCollidable(NO_COLLISION_GROUP, "Default", false)
+    end)
+    
+    -- Make it not collide with itself
+    pcall(function()
+        PhysicsService:CollisionGroupSetCollidable(NO_COLLISION_GROUP, NO_COLLISION_GROUP, false)
+    end)
+end
+
+setupCollisionGroup()
+
+local function setCharacter(char)
+    character = char
+    table.clear(cachedParts)
+end
+
+if player.Character then
+    setCharacter(player.Character)
+end
+
+local function isValidPart(p)
+    if not character then return false end
+    if not p:IsA("BasePart") then return false end
+    if p.Anchored then return false end
+    if p:IsDescendantOf(character) then return false end
+
+    local m = p:FindFirstAncestorOfClass("Model")
+    if m and m:FindFirstChildOfClass("Humanoid") then
+        return false
+    end
+
+    return true
+end
+
+local function isCarModel(m)
+    if not m or not m:IsA("Model") then return false end
+    local n = m.Name:lower()
+    return n == "car" or n == "carseat"
+end
+
+local function scanParts()
+    table.clear(cachedParts)
+
+    for _, obj in ipairs(Workspace:GetChildren()) do
+        if obj:IsA("Model") and isCarModel(obj) then
+            for _, d in ipairs(obj:GetDescendants()) do
+                if isValidPart(d) then
+                    table.insert(cachedParts, d)
+                end
+            end
+        end
+    end
+end
+
+task.delay(3, function()
+    if character then
+        scanParts()
+    end
+end)
+
+player.CharacterAdded:Connect(function(char)
+    setCharacter(char)
+
+    task.delay(5, function()
+        if character ~= char then return end
+
+        if not character or not character:IsDescendantOf(Workspace) then
+            character = player.Character or player.CharacterAdded:Wait()
+        end
+
+        scanParts()
+    end)
+end)
+
+local function getClosestPart()
+    if not character or not character.PrimaryPart then return nil end
+    
+    local charPos = character.PrimaryPart.Position
+    local closest = nil
+    local closestDist = math.huge
+    
+    for i = #cachedParts, 1, -1 do
+        local p = cachedParts[i]
+        if not p or not p.Parent or p.Anchored then
+            table.remove(cachedParts, i)
+        else
+            local dist = (p.Position - charPos).Magnitude
+            if dist < closestDist then
+                closestDist = dist
+                closest = p
+            end
+        end
+    end
+    
+    return closest
+end
+
+local function launchCached()
+    if #cachedParts == 0 then 
+        return 
+    end
+
+    local velocity =
+        camera.CFrame.LookVector * velocityCycle[velocityIndex] +
+        Vector3.new(0, FORCE_UP, 0)
+
+    for i = #cachedParts, 1, -1 do
+        local p = cachedParts[i]
+        if not p or not p.Parent or p.Anchored then
+            table.remove(cachedParts, i)
+        else
+            local bv = Instance.new("BodyVelocity")
+            bv.Velocity = velocity
+            bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+            bv.Parent = p
+            Debris:AddItem(bv, BV_LIFETIME)
+        end
+    end
+end
+
+local function toggleCollisions()
+    collisionsDisabled = not collisionsDisabled
+    
+    if collisionsDisabled then
+        -- Disable collisions and make transparent
+        table.clear(originalCollisionGroups)
+        table.clear(originalTransparencies)
+        table.clear(originalCanCollide)
+        
+        for _, p in ipairs(cachedParts) do
+            if p and p.Parent then
+                -- Store original collision group
+                originalCollisionGroups[p] = p.CollisionGroup
+                
+                -- Store original CanCollide state
+                originalCanCollide[p] = p.CanCollide
+                
+                -- Only modify transparency if not already fully transparent
+                if p.Transparency < 1 then
+                    originalTransparencies[p] = p.Transparency
+                    p.Transparency = 0.9
+                end
+                
+                -- Disable CanCollide
+                p.CanCollide = false
+                
+                -- Set to no collision group
+                p.CollisionGroup = NO_COLLISION_GROUP
+            end
+        end
+        
+        print("[Collisions] Collisions: Disabled (90% Transparent)")
+    else
+        -- Restore collisions and transparency
+        for p, originalGroup in pairs(originalCollisionGroups) do
+            if p and p.Parent then
+                p.CollisionGroup = originalGroup
+            end
+        end
+        
+        for p, originalCanCollideState in pairs(originalCanCollide) do
+            if p and p.Parent then
+                p.CanCollide = originalCanCollideState
+            end
+        end
+        
+        for p, originalTransparency in pairs(originalTransparencies) do
+            if p and p.Parent then
+                p.Transparency = originalTransparency
+            end
+        end
+        
+        table.clear(originalCollisionGroups)
+        table.clear(originalTransparencies)
+        table.clear(originalCanCollide)
+        print("[Collisions] Collisions: Enabled (Transparency Restored)")
+    end
+end
+
+local function getDirectionFromKey(keyCode)
+    local cam = camera.CFrame
+    
+    if keyCode == Enum.KeyCode.W then
+        return cam.LookVector
+    elseif keyCode == Enum.KeyCode.S then
+        return -cam.LookVector
+    elseif keyCode == Enum.KeyCode.A then
+        return -cam.RightVector
+    elseif keyCode == Enum.KeyCode.D then
+        return cam.RightVector
+    elseif keyCode == Enum.KeyCode.LeftAlt then
+        return Vector3.new(0, 1, 0)  -- Pure upward direction
+    end
+    
+    return Vector3.new(0, 0, 0)
+end
+
+local function calculateCombinedVelocity()
+    local combinedDirection = Vector3.new(0, 0, 0)
+    
+    for keyCode, _ in pairs(activeKeys) do
+        combinedDirection = combinedDirection + getDirectionFromKey(keyCode)
+    end
+    
+    if combinedDirection.Magnitude > 0 then
+        combinedDirection = combinedDirection.Unit
+    end
+    
+    return combinedDirection * velocityCycle[velocityIndex]
+end
+
+local function stopFlyingVelocity()
+    if activeBodyVelocity and activeBodyVelocity.Parent then
+        local part = activeBodyVelocity.Parent
+        activeBodyVelocity:Destroy()
+        activeBodyVelocity = nil
+        
+        -- Freeze the part in place
+        if part and part.Parent then
+            part.Velocity = Vector3.new(0, 0, 0)
+            part.RotVelocity = Vector3.new(0, 0, 0)
+        end
+    end
+end
+
+local function updateFlyingVelocity()
+    -- Get the closest part dynamically every frame
+    local currentPart = getClosestPart()
+    
+    if not currentPart or not currentPart.Parent then
+        stopFlyingVelocity()
+        return
+    end
+    
+    if next(activeKeys) == nil then
+        -- No keys pressed, stop and freeze
+        stopFlyingVelocity()
+        return
+    end
+    
+    -- If we're controlling a different part now, clean up the old one
+    if activeBodyVelocity and activeBodyVelocity.Parent ~= currentPart then
+        stopFlyingVelocity()
+    end
+    
+    -- Create or update BodyVelocity on the current closest part
+    if not activeBodyVelocity or not activeBodyVelocity.Parent then
+        local bv = Instance.new("BodyVelocity")
+        bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+        bv.Parent = currentPart
+        activeBodyVelocity = bv
+    end
+    
+    -- Update velocity based on current camera direction and active keys
+    activeBodyVelocity.Velocity = calculateCombinedVelocity()
+end
+
+-- Continuous update loop for flying mode
+RunService.RenderStepped:Connect(function()
+    if modeCycle[modeIndex] == "Flying Toggle" then
+        updateFlyingVelocity()
+    end
+end)
+
+local function cycleGravity()
+    gravityIndex = gravityIndex % #gravityCycle + 1
+    Workspace.Gravity = gravityCycle[gravityIndex]
+    print("[Gravity] Gravity: " .. gravityCycle[gravityIndex])
+end
+
+local function cycleVelocity()
+    velocityIndex = velocityIndex % #velocityCycle + 1
+    print("[Velocity] Velocity: " .. velocityCycle[velocityIndex])
+end
+
+local function cycleMode()
+    modeIndex = modeIndex % #modeCycle + 1
+    print("[Mode] Mode: " .. modeCycle[modeIndex])
+    
+    -- Clean up flying mode when switching modes
+    if modeCycle[modeIndex] ~= "Flying Toggle" then
+        stopFlyingVelocity()
+        table.clear(activeKeys)
+    end
+    
+    scanParts()
+end
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    
+    local shiftHeld = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
+        or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
+    
+    -- Shift + T: Cycle gravity
+    if input.KeyCode == Enum.KeyCode.T and shiftHeld then
+        cycleGravity()
+        return
+    end
+    
+    -- Shift + Y: Toggle collisions
+    if input.KeyCode == Enum.KeyCode.Y and shiftHeld then
+        toggleCollisions()
+        return
+    end
+    
+    -- Y: Cycle velocity
+    if input.KeyCode == Enum.KeyCode.Y and not shiftHeld then
+        cycleVelocity()
+        return
+    end
+    
+    -- Shift + Down: Cycle mode and rescan
+    if input.KeyCode == Enum.KeyCode.Down and shiftHeld then
+        cycleMode()
+        return
+    end
+    
+    -- Down (no shift): Just rescan
+    if input.KeyCode == Enum.KeyCode.Down and not shiftHeld then
+        scanParts()
+        return
+    end
+    
+    -- T: Launch (only in T Toggle mode)
+    if input.KeyCode == Enum.KeyCode.T and not shiftHeld then
+        if modeCycle[modeIndex] == "T Toggle" then
+            launchCached()
+        end
+        return
+    end
+    
+    -- WASD + Left Alt: Flying mode (only in Flying Toggle mode)
+    if (input.KeyCode == Enum.KeyCode.W or 
+        input.KeyCode == Enum.KeyCode.A or 
+        input.KeyCode == Enum.KeyCode.S or 
+        input.KeyCode == Enum.KeyCode.D or
+        input.KeyCode == Enum.KeyCode.LeftAlt) and 
+        modeCycle[modeIndex] == "Flying Toggle" then
+        
+        activeKeys[input.KeyCode] = true
+        return
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gp)
+    if gp then return end
+    
+    -- Remove key from active keys when released
+    if (input.KeyCode == Enum.KeyCode.W or 
+        input.KeyCode == Enum.KeyCode.A or 
+        input.KeyCode == Enum.KeyCode.S or 
+        input.KeyCode == Enum.KeyCode.D or
+        input.KeyCode == Enum.KeyCode.LeftAlt) and 
+        modeCycle[modeIndex] == "Flying Toggle" then
+        
+        activeKeys[input.KeyCode] = nil
+        return
+    end
+end)
+
+-- Initial print
+print("═══════════════════════════════════════════")
+print("[Car Launcher] Script Loaded Successfully")
+print("═══════════════════════════════════════════")
+print("[Controls]")
+print("  Shift + T      : Cycle Gravity (80→40→20→0)")
+print("  Y              : Cycle Velocity (35→65→100→155→20)")
+print("  Shift + Y      : Toggle Collisions + Transparency")
+print("  Shift + Down   : Cycle Mode + Rescan (Off→T Toggle→Flying Toggle)")
+print("  Down           : Rescan Cars")
+print("  T              : Launch All (T Toggle mode only)")
+print("  W/A/S/D        : Fly Closest Car (Flying Toggle mode only)")
+print("  Left Alt       : Upward Velocity (Flying Toggle mode only)")
+print("═══════════════════════════════════════════")
+print("[Current Settings]")
+print("  Gravity    : " .. gravityCycle[gravityIndex])
+print("  Velocity   : " .. velocityCycle[velocityIndex])
+print("  Mode       : " .. modeCycle[modeIndex])
+print("  Collisions : Enabled")
+print("═══════════════════════════════════════════")
