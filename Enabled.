@@ -1,4 +1,4 @@
-Recoil Reduction = true
-emotes = true 
-Fly = true
+Recoil Reduction = false
+emotes = false 
+Fly = false
 idk = false
