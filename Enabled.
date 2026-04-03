@@ -1,7 +1,7 @@
 Recoil = true
 emotes = false 
 Fly = false
-idk = false
+idk = true
 Packet = true
 Ultimate = true
 Project Delta = true
